@@ -1,0 +1,47 @@
+# CI für Orbly (Swift/SPM, native macOS-App).
+# macos-Runner werden mit 10-fachem Minutenfaktor abgerechnet, deshalb gezielt:
+# nur main und Pull Requests, nicht bei reinen Doku-Änderungen, und nur EIN
+# Build-Durchlauf (Release deckt den Typecheck mit ab).
+name: CI
+
+on:
+  # main plus die tatsächlich benutzten Branch-Präfixe. Reine Doku-Commits lösen
+  # nichts aus (macos-Runner kosten den 10-fachen Minutenfaktor). Kein separater
+  # pull_request-Trigger: In diesem Projekt wird über Merges auf main gearbeitet,
+  # sonst liefe alles doppelt.
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'refactor/**'
+    paths-ignore:
+      - '**.md'
+      - 'assets/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    # macos-15, nicht macos-14: Dessen Swift 5.10 lässt den Compiler mit
+    # "error: fatalError" abstürzen (Toolchain-Absturz, kein Code-Fehler).
+    # Gebaut und ausgeliefert wird die App ohnehin mit der aktuellen Toolchain,
+    # die CI soll denselben Compiler benutzen wie der Rechner, von dem released
+    # wird. Das Deployment-Ziel bleibt macOS 14 (Package.swift).
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift-Version
+        run: swift --version
+
+      - name: Abhängigkeiten auflösen
+        run: swift package resolve
+
+      - name: Build (Release)
+        run: swift build -c release
+
+      - name: Tests
+        run: swift test
+
+      - name: Shell-Skripte pruefen
+        run: for f in scripts/*.sh; do bash -n "$f"; done

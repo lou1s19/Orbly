@@ -1,0 +1,16 @@
+.build/
+build/
+models/*.bin
+.DS_Store
+*.wav
+
+# Secrets: nie ins Repo (Signier-Schlüssel liegen im Schlüsselbund)
+.env
+.env.*
+*.p12
+*.pem
+sparkle_private_key*
+
+# Mitgelieferte Whisper-Engine: Binary, wird von
+# scripts/build-whisper-engine.sh erzeugt
+vendor/
