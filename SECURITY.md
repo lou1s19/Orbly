@@ -3,7 +3,7 @@
 Wenn du eine Sicherheitslücke findest, mach dafür **kein öffentliches Issue** auf.
 
 Nutze stattdessen die private Meldefunktion von GitHub:
-[Security Advisory melden](https://github.com/lou1s19/orbly-mac/security/advisories/new)
+[Security Advisory melden](https://github.com/lou1s19/Orbly/security/advisories/new)
 
 Ich melde mich innerhalb weniger Tage. Wenn du möchtest, wirst du im Fix genannt.
 
