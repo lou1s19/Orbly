@@ -8,11 +8,11 @@
 
 Transkribiert wird auf deinem Mac, nicht in der Cloud. Kein Konto, keine Telemetrie.
 
-<img src="https://img.shields.io/github/license/lou1s19/orbly-mac" alt="Lizenz" />
-<img src="https://img.shields.io/github/v/release/lou1s19/orbly-mac" alt="Version" />
+<img src="https://img.shields.io/github/license/lou1s19/Orbly" alt="Lizenz" />
+<img src="https://img.shields.io/github/v/release/lou1s19/Orbly" alt="Version" />
 <img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey" alt="Plattform" />
 <img src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-blue" alt="Universal" />
-<img src="https://img.shields.io/github/stars/lou1s19/orbly-mac" alt="Stars" />
+<img src="https://img.shields.io/github/stars/lou1s19/Orbly" alt="Stars" />
 
 </div>
 
