@@ -1,0 +1,11 @@
+# Haelt die GitHub-Actions und Swift-Abhaengigkeiten aktuell.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+  - package-ecosystem: "swift"
+    directory: "/"
+    schedule:
+      interval: "monthly"

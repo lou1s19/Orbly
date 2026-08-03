@@ -1,98 +1,114 @@
+<div align="center">
+
+<img src="Resources/logo.png" alt="Orbly" width="110" />
+
 # Orbly
 
-Diktier-App für macOS. Fn-Taste halten, sprechen, loslassen, der Text landet an der
-Cursor-Position. Transkribiert wird auf dem eigenen Mac mit
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp), optional über einen eigenen
-Server im Heimnetz.
+**Diktier-App für macOS. Fn halten, sprechen, loslassen. Der Text landet an der Cursor-Position.**
 
-**Download der fertigen App:** [orbly-website.vercel.app](https://orbly-website.vercel.app)
+Transkribiert wird auf deinem Mac, nicht in der Cloud. Kein Konto, keine Telemetrie.
 
-**Deine Aufnahmen und Texte verlassen den Mac nicht.** Ins Netz geht Orbly nur an drei
-Stellen: an deinen Transkriptions-Endpunkt (standardmäßig `127.0.0.1`), einmalig an
-`huggingface.co` beim Herunterladen eines Sprachmodells und an die Update-Prüfung.
-Kein Konto, keine Telemetrie, keine Analyse. Der Code hier ist der Beleg dafür.
+<img src="https://img.shields.io/github/license/lou1s19/orbly-mac" alt="Lizenz" />
+<img src="https://img.shields.io/github/v/release/lou1s19/orbly-mac" alt="Version" />
+<img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey" alt="Plattform" />
+<img src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-blue" alt="Universal" />
+<img src="https://img.shields.io/github/stars/lou1s19/orbly-mac" alt="Stars" />
+
+</div>
+
+## Download
+
+**[Orbly für macOS herunterladen](https://orbly-website.vercel.app)**
+
+Signiert und von Apple notarisiert, öffnet also ohne Sicherheitswarnung. Universal
+Binary für Apple Silicon und Intel, macOS 14 oder neuer. Die App aktualisiert sich
+selbst.
 
 ## Bedienung
 
 | Aktion | Wirkung |
 |---|---|
-| **Fn halten** | Push-to-talk: aufnehmen solange gedrückt, beim Loslassen wird transkribiert |
-| **Fn kurz tippen** | Aufnahme startet und läuft weiter; erneut tippen beendet sie |
-| **Esc** | Aufnahme abbrechen, auch während der Verarbeitung |
+| **Fn halten** | Aufnehmen solange gedrückt, beim Loslassen wird transkribiert |
+| **Fn kurz tippen** | Aufnahme läuft weiter, erneutes Tippen beendet sie |
+| **Esc** | Abbrechen, auch während der Verarbeitung |
 
-## Voraussetzungen
+## Features
 
-- macOS 14+, Apple Silicon und Intel (Universal Binary)
-- Sonst nichts. Die Whisper-Engine liegt in der App, das Sprachmodell lädt sie beim
-  ersten Start herunter.
+- **Läuft offline.** Whisper-Engine liegt in der App, kein Homebrew, keine Installation.
+- **Fünf Sprachen in der Oberfläche** (en, de, es, fr, ru), Spracherkennung automatisch.
+- **Eigener Server möglich.** Whisper auf einem anderen Rechner laufen lassen und den
+  RAM des Macs freihalten. OpenAI-kompatible Endpunkte funktionieren auch.
+- **Overlay mit Live-Pegel**, vier Stile, Position frei wählbar.
+- **Statistik und Verlauf.** Die Statistik speichert nur Zahlen, nie den Text. Der
+  Verlauf ist abschaltbar, löschbar und altert nach drei Tagen von selbst aus.
+- **Menüleiste statt Fenster.** Kein Programm, das im Weg steht.
+
+## Datenschutz
+
+Deine Aufnahmen und Texte verlassen den Mac nicht. Ins Netz geht Orbly an genau drei
+Stellen, und alle drei kannst du im Code nachlesen:
+
+| Wohin | Wann | Was |
+|---|---|---|
+| `127.0.0.1` | bei jedem Diktat | die Aufnahme, an die lokale Engine |
+| `huggingface.co` | einmalig | Download des Sprachmodells |
+| Update-Feed | beim Start | Versionsprüfung, abschaltbar |
+
+Kein Konto, keine Telemetrie, keine Analyse, kein Gerätekennzeichen. Ein Test in
+diesem Repo schlägt fehl, wenn jemand ein Textfeld in die Statistik einbaut, damit
+bleibt das Versprechen überprüfbar statt behauptet.
 
 ## Selbst bauen
 
 ```bash
-brew install cmake                    # einmalig, für die Engine
+brew install cmake                    # einmalig, für die Whisper-Engine
 bash scripts/make-signing-cert.sh     # einmalig, stabiles Signier-Zertifikat
 bash scripts/build-app.sh             # baut Engine + App, installiert nach /Applications
 ```
 
-Ohne eigenes Zertifikat wird ad-hoc signiert. Dann verwirft macOS die
-Bedienungshilfen-Berechtigung bei **jedem** Neubau und das automatische Einfügen
-funktioniert nicht mehr, bis sie neu erteilt wird. Deshalb der zweite Schritt.
+Ohne eigenes Zertifikat wird ad-hoc signiert, und dann verwirft macOS die
+Bedienungshilfen-Berechtigung bei **jedem** Neubau. Deshalb der zweite Schritt.
 
-Die Engine (`whisper-server` aus whisper.cpp) wird von
-`scripts/build-whisper-engine.sh` statisch gebaut und landet in `Contents/Helpers/`
-im App-Bundle. Sie hat keine Abhängigkeit auf Homebrew, damit die App auf jedem Mac
-läuft. Das Skript prüft das nach dem Bauen selbst.
-
-Beim ersten Start:
-
-1. **Mikrofon** erlauben
-2. **Bedienungshilfen** erlauben (Systemeinstellungen → Datenschutz & Sicherheit →
-   Bedienungshilfen), nötig für die Fn-Taste und das Einfügen
-3. Systemeinstellungen → Tastatur → „Fn-Taste drücken für" → **„Keine Aktion"**,
-   sonst öffnet macOS Emoji oder die eigene Diktierfunktion
-
-## Tests
+Beim ersten Start Mikrofon und Bedienungshilfen erlauben, und in den
+Systemeinstellungen unter Tastatur „Fn-Taste drücken für" auf **„Keine Aktion"**
+stellen, sonst öffnet macOS seine eigene Diktierfunktion.
 
 ```bash
-swift test
+swift test    # 48 Tests
 ```
 
-48 Tests. Abgedeckt ist bewusst das, was in der Vergangenheit wirklich kaputtgegangen
-ist: der Zusammenbau der Whisper-Segmente (dort entstanden Lücken mitten im Wort), die
-Statistik-Rechnung samt Verdichtung, der Gleichstand der fünf Sprachtabellen inklusive
-Platzhalter, und der Modell-Katalog mit seinen Prüfsummen. Ein Test schlägt fehl, wenn
-jemand ein Textfeld in die Statistik einbaut, damit bleibt das Datenschutz-Versprechen
-überprüfbar statt behauptet.
+## Technik
 
-## Architektur
-
-- Swift-Menüleisten-App (SwiftPM, kein Xcode-Projekt nötig)
-- Fn-Erkennung über `NSEvent`-Monitore (`flagsChanged`, keyCode 63)
-- Aufnahme: `AVAudioEngine` → 16 kHz mono WAV
-- Transkription: HTTP-POST an `whisper-server` (`/inference`), lokal oder remote;
-  OpenAI-kompatible Endpunkte funktionieren ebenfalls
-- Einfügen: Zwischenablage + simuliertes ⌘V, danach wird die Zwischenablage
+- Swift, SwiftUI und AppKit, gebaut mit SwiftPM, kein Xcode-Projekt nötig
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp) als Engine, statisch gebaut
+  und mit im App-Bundle
+- Fn-Erkennung über `NSEvent`-Monitore, Aufnahme über `AVAudioEngine` (16 kHz mono)
+- Einfügen über die Zwischenablage und simuliertes ⌘V, danach wird die Zwischenablage
   wiederhergestellt
-- Alle UI-Texte in `Sources/Orbly/L10n.swift`, fünf Sprachen (en, de, es, fr, ru)
+- Metal für das Orb-Overlay, Swift Charts für die Statistik,
+  [Sparkle](https://sparkle-project.org) für Updates
 
 ## Beitragen
 
-Fehlerberichte und Pull Requests sind willkommen. Zwei Bitten:
+Fehlerberichte und Pull Requests sind willkommen. Vor einem größeren Umbau kurz ein
+Issue aufmachen, damit die Arbeit nicht ins Leere läuft. Details in
+[CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
-- Vor einem größeren Umbau kurz ein Issue aufmachen, damit die Arbeit nicht ins Leere
-  läuft.
-- Neue nutzersichtbare Texte gehören nach `L10n.swift` in **allen fünf** Sprachen,
-  sonst schlagen die Tests fehl. Und keine Gedankenstriche in UI-Texten, das prüft
-  ein Test ebenfalls.
-
-`swift build` und `swift test` müssen grün sein, das prüft die CI auch selbst.
+Zwei Dinge prüfen die Tests automatisch: Neue nutzersichtbare Texte müssen in
+`Sources/Orbly/L10n.swift` in **allen fünf** Sprachen stehen, und UI-Texte enthalten
+keine Gedankenstriche.
 
 ## Lizenz
 
-[GNU AGPL v3](LICENSE). Kurz gesagt: Du darfst den Code benutzen, ändern und
-weitergeben, aber wenn du eine geänderte Version verbreitest oder als Dienst
-anbietest, muss dein Quellcode ebenfalls unter der AGPL offen liegen.
+[GNU AGPL v3](LICENSE). Du darfst den Code benutzen, ändern und weitergeben. Wenn du
+eine geänderte Version verbreitest oder als Dienst anbietest, muss dein Quellcode
+ebenfalls unter der AGPL offen liegen.
 
-Die fertige, signierte und von Apple beglaubigte App gibt es über die Website. Falls
-später kostenpflichtige Zusatzfunktionen dazukommen, liegen die außerhalb dieses
-Repos. Alles, was hier liegt, bleibt unter der AGPL.
+Falls später kostenpflichtige Zusatzfunktionen dazukommen, liegen die außerhalb dieses
+Repos. Alles hier bleibt unter der AGPL.
+
+## Dank
+
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) von Georgi Gerganov und den
+ggml-Beitragenden, [Whisper](https://github.com/openai/whisper) von OpenAI und
+[Sparkle](https://sparkle-project.org) für die Update-Infrastruktur.
