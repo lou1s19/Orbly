@@ -8,6 +8,17 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
 
 ---
 
+## 2026-08-08 — Release v1.1.0
+
+- **Gemacht:** Version 1.1.0 (Build 3) gebaut, mit Developer ID signiert, von Apple
+  notarisiert und gestapelt, über die Website veröffentlicht (Zip für Sparkle, DMG als
+  Erst-Download, `appcast.xml`). Angezeigte Version auf der Website nachgezogen.
+- **Dazu:** Das Release-Werkzeug lag bisher nur im alten privaten Repo. `release.sh`,
+  `publish-release.sh`, `make-dmg.sh` und `RELEASING.md` liegen jetzt hier, damit ein
+  Release aus diesem Repo überhaupt möglich ist. In `RELEASING.md` steht keine
+  Apple-ID und keine private Adresse, das gehört nicht in ein öffentliches Repo.
+- **Offen / Nächster Schritt:** Update-Weg noch nicht auf einem zweiten Mac getestet.
+
 ## 2026-08-08 — Erster Fn-Druck nach langer Pause sagt Bescheid
 
 - **Gemacht:** `AudioRecorder` misst die Aufwachzeit des Starts, `WakeUpPress`
