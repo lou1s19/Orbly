@@ -48,6 +48,11 @@ final class AudioRecorder {
     private(set) var isRecording = false
     /// Dauer der letzten abgeschlossenen Aufnahme (aus der Sample-Zahl, für die Statistik).
     private(set) var lastDurationSeconds: Double = 0
+    /// Wie lange der letzte `start()` gebraucht hat. Nach längerer Pause schläft
+    /// die Audio-Hardware: Das Aufwecken blockiert hier spürbar, und genau diese
+    /// Zeit fehlt vorne in der Aufnahme. Der AppDelegate erkennt daran einen
+    /// "Aufwachdruck" und bittet den Nutzer, noch einmal zu drücken.
+    private(set) var lastStartWarmupSeconds: TimeInterval = 0
     /// Gerätewechsel mitten in der Aufnahme, von dem sich die Engine nicht
     /// erholen konnte (z. B. AirPods verbinden sich).
     private var engineBroken = false
@@ -95,6 +100,11 @@ final class AudioRecorder {
         guard !isRecording else { return }
         samplesQueue.sync { samples.removeAll() }
         engineBroken = false
+        // Ab hier wird gemessen: `inputNode`, `prepare()` und `start()` wecken
+        // zusammen die Audio-Hardware auf, das kann nach langer Pause über eine
+        // Sekunde dauern.
+        let warmupStart = Date()
+        lastStartWarmupSeconds = 0
 
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
@@ -122,6 +132,10 @@ final class AudioRecorder {
             input.removeTap(onBus: 0)
             setConverter(nil)
             throw error
+        }
+        lastStartWarmupSeconds = Date().timeIntervalSince(warmupStart)
+        if lastStartWarmupSeconds >= WakeUpPress.warmupThreshold {
+            NSLog("Orbly: Audio-Hardware war eingeschlafen, Start dauerte \(String(format: "%.2f", lastStartWarmupSeconds)) s")
         }
         isRecording = true
     }

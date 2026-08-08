@@ -52,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let maxRecordingSeconds: TimeInterval = 600
     /// System-Dialog für Bedienungshilfen nur einmal pro Sitzung zeigen.
     private var axPromptShown = false
+    /// Für dieses Diktat musste der lokale Server erst hochfahren (Idle-Abschaltung).
+    private var serverColdStartThisPress = false
 
     // MARK: - Lifecycle
 
@@ -388,6 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // Kaltstart nach Idle-Abschaltung: Modell lädt, während der Nutzer
                 // spricht - das Overlay pulsiert derweil sanft als Hinweis.
                 let coldStart = AppSettings.shared.mode == .local && !self.localServer.isRunning
+                self.serverColdStartThisPress = coldStart
                 self.localServer.startIfNeeded()
                 if coldStart { self.overlay.setServerStarting(true) }
                 self.maxDurationTimer?.invalidate()
@@ -472,16 +475,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         case .file(let url):
             wavURL = url
         case .tooShort:
-            // Too short - just dismiss quietly
             state = .idle
-            overlay.hide()
-            if onboarding.captureActive { onboarding.cancelled() }
+            // Zurücksetzen, sonst pulsiert das Overlay den Rest der Sitzung im
+            // „Server startet"-Zustand: Der Weg über waitUntilReady, der das sonst
+            // erledigt, wird hier nie erreicht.
+            overlay.setServerStarting(false)
             updateStatus()
+            // Aufwachdruck: Die Audio-Hardware (und ggf. der lokale Server) lag im
+            // Schlaf, das Aufwecken hat den Druck aufgefressen. Sagen, dass es
+            // jetzt geht, statt kommentarlos zu verschwinden.
+            let wakeUp = WakeUpPress.shouldHint(
+                recordingWasTooShort: true,
+                audioWarmup: recorder.lastStartWarmupSeconds,
+                serverColdStart: serverColdStartThisPress
+            )
+            if onboarding.captureActive {
+                overlay.hide()
+                // In der Tour gehört der Hinweis ins Fenster, wo der Nutzer hinschaut.
+                if wakeUp { onboarding.fail(L10n.t("overlay.hint.pressAgain")) } else { onboarding.cancelled() }
+            } else if wakeUp {
+                overlay.showHint(L10n.t("overlay.hint.pressAgain"))
+            } else {
+                // Fn nur gestreift: still verwerfen wie bisher.
+                overlay.hide()
+            }
             return
         case .failed:
             // Aufnahme fehlgeschlagen (Gerätewechsel, Platte voll): nicht
             // stillschweigend verwerfen - der Nutzer hat gerade gesprochen.
             state = .idle
+            overlay.setServerStarting(false)
             updateStatus()
             report(error: L10n.t("overlay.error.recordingFailed"))
             return
