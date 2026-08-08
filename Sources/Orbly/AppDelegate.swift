@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     static let onboardingWindowID = "orbly.onboarding"
     /// Verhindert, dass ein zweiter Klick das Ausblenden neu startet.
     private var onboardingClosing = false
+    /// Spendenhinweis (siehe Donation.swift). Nur zeitweise offen.
+    private var donationWindow: NSWindow?
 
     private var state: DictationState = .idle
     private var fnPressStarted: Date?
@@ -93,7 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self?.updateStatus()
         }
 
-        if showTour { showOnboarding() }
+        if showTour {
+            showOnboarding()
+        } else if Donation.shouldShowNow {
+            // Kurz warten: Beim Start mit der Anmeldung soll nicht sofort ein
+            // Fenster vor dem Schreibtisch stehen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.showDonationPrompt()
+            }
+        }
     }
 
     /// Automatische Update-Suche ist der Standard. Einmalig explizit setzen,
@@ -227,6 +237,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard notification.object as? NSWindow === onboardingWindow else { return }
         onboarding.captureActive = false
         AppSettings.shared.onboardingCompleted = true
+    }
+
+    // MARK: - Spendenhinweis
+
+    /// Zeigt den Spendenhinweis. Der Zeitpunkt wird sofort festgehalten, damit
+    /// die 14-Tage-Pause auch dann läuft, wenn das Fenster über den roten Knopf
+    /// verschwindet oder die App vorher beendet wird.
+    func showDonationPrompt() {
+        // Zwischen Prüfung und Anzeige liegen zwei Sekunden: In der Zeit kann
+        // die Tour geöffnet worden sein, und zwei Fenster übereinander wären nur
+        // im Weg.
+        guard onboardingWindow?.isVisible != true else { return }
+        AppSettings.shared.donationPromptLastShown = Date()
+        let count = AppSettings.shared.dictationCount
+        let root = DonationView(dictations: count) { [weak self] in
+            self?.closeDonationPrompt()
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: root))
+        window.title = "Orbly"
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.isReleasedWhenClosed = false
+        // Wie die Tour: immer dunkel, damit die Ampel-Buttons passen.
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.center()
+        donationWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func closeDonationPrompt() {
+        donationWindow?.close()
+        donationWindow = nil
     }
 
     // MARK: - Permissions
@@ -507,6 +554,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     return
                 }
                 Stats.record(text: text, seconds: recordedSeconds)
+                // Zählt nur für den Spendenhinweis mit (Donation.swift).
+                AppSettings.shared.dictationCount += 1
                 // Offene Fenster nachziehen: Diktiert der Nutzer, während das
                 // Orbly-Fenster vorne ist, feuert kein Fokuswechsel und Verlauf
                 // wie Statistik blieben stehen. Erst melden, wenn der Eintrag
