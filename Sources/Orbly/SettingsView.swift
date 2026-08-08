@@ -225,6 +225,8 @@ struct SettingsView: View {
                 }
             }
 
+            SupportCard()
+
             Text(.init(L10n.t("settings.hint")))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -523,6 +525,37 @@ private struct UpdatesRow: View {
                 }
                 .controlSize(.small)
             }
+        }
+    }
+}
+
+// MARK: - Spenden
+
+/// Der Weg zur Spendenseite, auch wenn das Startfenster längst weggeklickt
+/// wurde. Wer schon bestätigt hat, sieht statt der Bitte ein Dankeschön.
+private struct SupportCard: View {
+    @State private var hasDonated = AppSettings.shared.hasDonated
+
+    var body: some View {
+        SettingsCard(title: L10n.t("settings.card.support"), icon: "heart") {
+            Text(hasDonated ? L10n.t("settings.support.donated") : L10n.t("settings.support.body"))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button(L10n.t("settings.support.button")) {
+                    NSWorkspace.shared.open(Donation.pageURL)
+                }
+                .controlSize(.small)
+            }
+        }
+        // Der Stand kann sich im Spendenfenster geändert haben, während die
+        // Einstellungen im Speicher liegen (das Fenster wird nur versteckt).
+        .onAppear { hasDonated = AppSettings.shared.hasDonated }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            hasDonated = AppSettings.shared.hasDonated
         }
     }
 }

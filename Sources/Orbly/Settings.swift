@@ -149,6 +149,34 @@ final class AppSettings {
         set { d.set(newValue, forKey: "onboardingCompleted") }
     }
 
+    // MARK: - Spendenhinweis (Regeln stehen in Donation.swift)
+
+    /// Selbst bestätigt: „Ich habe gespendet". Danach kommt der Hinweis nie wieder.
+    var hasDonated: Bool {
+        get { d.bool(forKey: "hasDonated") }
+        set { d.set(newValue, forKey: "hasDonated") }
+    }
+
+    /// „Nicht mehr fragen" im Spendenfenster.
+    var donationPromptDisabled: Bool {
+        get { d.bool(forKey: "donationPromptDisabled") }
+        set { d.set(newValue, forKey: "donationPromptDisabled") }
+    }
+
+    /// Wann der Hinweis zuletzt zu sehen war.
+    var donationPromptLastShown: Date? {
+        get { d.object(forKey: "donationPromptLastShown") as? Date }
+        set { d.set(newValue, forKey: "donationPromptLastShown") }
+    }
+
+    /// Zahl der abgeschlossenen Diktate. Nur ein Zähler für den Spendenhinweis,
+    /// bewusst nicht aus der Statistik gelesen: die liegt in einer Datei, die
+    /// gelöscht werden darf, und ihre Auswertung läuft asynchron.
+    var dictationCount: Int {
+        get { d.integer(forKey: "dictationCount") }
+        set { d.set(newValue, forKey: "dictationCount") }
+    }
+
     /// UI-Sprache der App: "auto" (= Systemsprache) oder ISO-Code (en/de/es/fr/ru).
     var appLanguage: String {
         get { d.string(forKey: "appLanguage") ?? "auto" }
