@@ -52,8 +52,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let maxRecordingSeconds: TimeInterval = 600
     /// System-Dialog für Bedienungshilfen nur einmal pro Sitzung zeigen.
     private var axPromptShown = false
-    /// Für dieses Diktat musste der lokale Server erst hochfahren (Idle-Abschaltung).
-    private var serverColdStartThisPress = false
 
     // MARK: - Lifecycle
 
@@ -390,7 +388,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // Kaltstart nach Idle-Abschaltung: Modell lädt, während der Nutzer
                 // spricht - das Overlay pulsiert derweil sanft als Hinweis.
                 let coldStart = AppSettings.shared.mode == .local && !self.localServer.isRunning
-                self.serverColdStartThisPress = coldStart
                 self.localServer.startIfNeeded()
                 if coldStart { self.overlay.setServerStarting(true) }
                 self.maxDurationTimer?.invalidate()
@@ -481,13 +478,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             // erledigt, wird hier nie erreicht.
             overlay.setServerStarting(false)
             updateStatus()
-            // Aufwachdruck: Die Audio-Hardware (und ggf. der lokale Server) lag im
-            // Schlaf, das Aufwecken hat den Druck aufgefressen. Sagen, dass es
-            // jetzt geht, statt kommentarlos zu verschwinden.
+            // Aufwachdruck: Die Audio-Hardware lag im Schlaf, das Aufwecken hat den
+            // Druck aufgefressen. Sagen, dass es jetzt geht, statt kommentarlos zu
+            // verschwinden.
             let wakeUp = WakeUpPress.shouldHint(
                 recordingWasTooShort: true,
-                audioWarmup: recorder.lastStartWarmupSeconds,
-                serverColdStart: serverColdStartThisPress
+                audioWarmup: recorder.lastStartWarmupSeconds
             )
             if onboarding.captureActive {
                 overlay.hide()

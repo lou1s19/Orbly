@@ -8,21 +8,7 @@ final class WakeUpPressTests: XCTestCase {
 
     func testAufwachdruckMitLangsamerAudioHardwareZeigtHinweis() {
         XCTAssertTrue(
-            WakeUpPress.shouldHint(
-                recordingWasTooShort: true,
-                audioWarmup: 1.2,
-                serverColdStart: false
-            )
-        )
-    }
-
-    func testAufwachdruckMitServerKaltstartZeigtHinweis() {
-        XCTAssertTrue(
-            WakeUpPress.shouldHint(
-                recordingWasTooShort: true,
-                audioWarmup: 0.01,
-                serverColdStart: true
-            )
+            WakeUpPress.shouldHint(recordingWasTooShort: true, audioWarmup: 1.2)
         )
     }
 
@@ -30,32 +16,22 @@ final class WakeUpPressTests: XCTestCase {
     /// bei jedem Fehlgriff ein Hinweis auf.
     func testKurzesVersehenBleibtStumm() {
         XCTAssertFalse(
-            WakeUpPress.shouldHint(
-                recordingWasTooShort: true,
-                audioWarmup: 0.01,
-                serverColdStart: false
-            )
+            WakeUpPress.shouldHint(recordingWasTooShort: true, audioWarmup: 0.01)
         )
     }
 
-    /// Ein normales Diktat mit Kaltstart lief ja durch - dafür gibt es keinen Grund
-    /// zu meckern.
+    /// Ein Diktat, das trotz schlafender Hardware lang genug wurde, lief ja durch -
+    /// dafür gibt es keinen Grund zu meckern.
     func testAusreichendLangeAufnahmeNieMitHinweis() {
         XCTAssertFalse(
-            WakeUpPress.shouldHint(
-                recordingWasTooShort: false,
-                audioWarmup: 2.0,
-                serverColdStart: true
-            )
+            WakeUpPress.shouldHint(recordingWasTooShort: false, audioWarmup: 2.0)
         )
     }
 
     func testGenauAufDerSchwelleGiltAlsAufwachdruck() {
         XCTAssertTrue(
             WakeUpPress.shouldHint(
-                recordingWasTooShort: true,
-                audioWarmup: WakeUpPress.warmupThreshold,
-                serverColdStart: false
+                recordingWasTooShort: true, audioWarmup: WakeUpPress.warmupThreshold
             )
         )
     }

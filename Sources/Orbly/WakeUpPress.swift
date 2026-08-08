@@ -17,19 +17,19 @@ enum WakeUpPress {
     /// Warm liegt der Start deutlich darunter (wenige Millisekunden).
     static let warmupThreshold: TimeInterval = 0.2
 
+    /// Bewusst nur die gemessene Aufwachzeit der Audio-Hardware. Ein Kaltstart des
+    /// lokalen whisper-servers ist zwar auch ein Zeichen langer Pause, kostet aber
+    /// keine Aufnahme: Er läuft nebenher, während schon aufgenommen wird. Als
+    /// Auslöser genommen, würde er jeden versehentlichen Fn-Streifer nach einer
+    /// Pause zu einem Hinweis aufblasen.
+    ///
     /// - Parameters:
     ///   - recordingWasTooShort: Die Aufnahme hat die Mindestlänge nicht erreicht.
     ///   - audioWarmup: Dauer des letzten `AudioRecorder.start()`.
-    ///   - serverColdStart: Der lokale whisper-server musste für diesen Druck
-    ///     erst starten (Idle-Abschaltung).
-    static func shouldHint(
-        recordingWasTooShort: Bool,
-        audioWarmup: TimeInterval,
-        serverColdStart: Bool
-    ) -> Bool {
+    static func shouldHint(recordingWasTooShort: Bool, audioWarmup: TimeInterval) -> Bool {
         // Ein normaler Fehlgriff (Fn kurz gestreift) bleibt stumm wie bisher -
         // ein Hinweis bei jedem versehentlichen Antippen wäre nur lästig.
         guard recordingWasTooShort else { return false }
-        return audioWarmup >= warmupThreshold || serverColdStart
+        return audioWarmup >= warmupThreshold
     }
 }
