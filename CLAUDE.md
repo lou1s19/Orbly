@@ -44,6 +44,20 @@ Bedienungshilfen-Berechtigung bei jedem Neubau.
 - Größere Änderungen auf einem Feature-Branch, nie direkt auf `main` (dort greift ein
   Branch-Schutz). Bei paralleler Arbeit im selben Repo ein `git worktree` nutzen.
 
+## Stolperfallen, die schon einmal Zeit gekostet haben
+
+- **Signier-Identität nie wechseln.** macOS hängt die Bedienungshilfen-Freigabe am
+  Code-Hash. Ein Build mit anderer Identität (oder ad hoc) macht das Auto-Einfügen
+  stumm kaputt, bis der Nutzer sie erneut erteilt. Für Builds über eine installierte
+  Release-Version deshalb `ORBLY_SIGN_IDENTITY="Developer ID Application: …"` setzen.
+- **Ohne Bedienungshilfen liefert der Fn-Monitor gar keine Events**, die App wirkt tot.
+  Der Menüpunkt zeigt das darum als Warnung an.
+- **Aufwachdruck:** Nach längerer Pause schläft die Audio-Hardware und
+  `AVAudioEngine.start()` blockiert über eine Sekunde. `WakeUpPress` erkennt daran eine
+  zu kurze Aufnahme als Aufwachdruck und bittet, noch einmal zu drücken.
+- **Jeder Abbruchpfad muss die WAV löschen.** Das sind private Sprachaufnahmen, sie
+  dürfen nicht im Temp-Ordner liegen bleiben.
+
 ## Datenschutz ist hier eine Produkteigenschaft
 
 Orbly verspricht, dass Aufnahmen und Texte den Mac nicht verlassen. Ins Netz geht die
