@@ -7,6 +7,9 @@ enum OverlayPhase: Equatable {
     case error(String)
     /// Kurzer "App läuft"-Gruß direkt nach dem Start (Häkchen-Kapsel).
     case ready
+    /// Freundlicher Hinweis statt Fehler, z. B. "bitte noch einmal drücken"
+    /// nach einem Aufwachdruck (siehe `WakeUpPress`).
+    case hint(String)
 }
 
 enum OverlayStyle: String, CaseIterable {
@@ -146,6 +149,26 @@ final class OverlayController {
         state.serverStarting = starting
     }
 
+    /// Kurzer Hinweis in derselben Kapsel-Optik wie der Start-Gruß. Bewusst nicht
+    /// als Fehler dargestellt: Es ist nichts kaputt, es fehlt nur ein zweiter Druck.
+    func showHint(_ message: String) {
+        hideTimer?.invalidate()
+        hideGeneration += 1
+        state.phase = .hint(message)
+        state.overlayVisible = true
+        resizeAndPosition(CGSize(width: 340, height: 40))
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 2.6, repeats: false) { [weak self] _ in
+            self?.hide()
+        }
+    }
+
     func showError(_ message: String) {
         state.phase = .error(message)
         state.overlayVisible = true
@@ -234,6 +257,8 @@ struct OverlayRootView: View {
         Group {
             if case .error(let msg) = state.phase {
                 ErrorView(message: msg)
+            } else if case .hint(let msg) = state.phase {
+                HintFlashView(message: msg)
             } else if state.phase == .ready {
                 ReadyFlashView()
             } else {
@@ -270,15 +295,21 @@ private struct ServerStartingPulse: ViewModifier {
     }
 }
 
-// MARK: - Ready flash (kurzer Start-Gruß)
+// MARK: - Kurzmeldungen (Start-Gruß, Hinweis)
 
-struct ReadyFlashView: View {
+/// Glas-Kapsel mit Symbol und einer Zeile Text. Wächst mit dem Text, deshalb
+/// darf das Panel dahinter ruhig breiter sein als die Meldung.
+struct CapsuleBadge: View {
+    let symbol: String
+    let text: String
+
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-            Text(L10n.t("overlay.ready"))
+            Text(text)
                 .font(.system(size: 12, weight: .medium))
+                .lineLimit(1)
         }
         .foregroundStyle(Color.white.opacity(0.92))
         .padding(.horizontal, 14)
@@ -297,6 +328,22 @@ struct ReadyFlashView: View {
             }
         }
         .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
+    }
+}
+
+struct ReadyFlashView: View {
+    var body: some View {
+        CapsuleBadge(symbol: "checkmark.circle.fill", text: L10n.t("overlay.ready"))
+    }
+}
+
+/// Hinweis nach einem Aufwachdruck: Orbly ist jetzt wach, es fehlt nur der
+/// zweite Druck. Absichtlich dieselbe ruhige Optik wie der Start-Gruß.
+struct HintFlashView: View {
+    let message: String
+
+    var body: some View {
+        CapsuleBadge(symbol: "hand.tap.fill", text: message)
     }
 }
 
