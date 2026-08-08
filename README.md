@@ -88,6 +88,18 @@ swift test    # 48 Tests
 - Metal für das Orb-Overlay, Swift Charts für die Statistik,
   [Sparkle](https://sparkle-project.org) für Updates
 
+## Unterstützen
+
+Orbly ist quelloffen und bleibt kostenlos. Wer möchte, kann die Entwicklung über
+[Ko-fi](https://ko-fi.com/lou1s) unterstützen.
+
+Die App fragt genau einmal danach: nach 20 Diktaten, danach höchstens alle 14 Tage,
+und nach einem Klick auf „Ich habe gespendet" nie wieder. Das ist eine reine
+Vertrauenssache, es gibt keine Prüfung und keinen Server dahinter. Wer den Hinweis
+sofort loswerden will, klickt „Nicht mehr fragen" oder setzt in der App
+`defaults write com.louis.orbly donationPromptDisabled -bool true`. Die Spendenseite
+bleibt in den Einstellungen erreichbar.
+
 ## Beitragen
 
 Fehlerberichte und Pull Requests sind willkommen. Vor einem größeren Umbau kurz ein
@@ -104,8 +116,8 @@ keine Gedankenstriche.
 eine geänderte Version verbreitest oder als Dienst anbietest, muss dein Quellcode
 ebenfalls unter der AGPL offen liegen.
 
-Falls später kostenpflichtige Zusatzfunktionen dazukommen, liegen die außerhalb dieses
-Repos. Alles hier bleibt unter der AGPL.
+Die ganze App liegt in diesem Repo, es gibt keine geschlossenen Zusatzteile und keine
+kostenpflichtige Version. Finanziert wird sie über freiwillige Spenden.
 
 ## Dank
 
