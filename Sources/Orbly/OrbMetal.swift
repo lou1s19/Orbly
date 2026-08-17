@@ -190,10 +190,27 @@ final class OrbRenderer: NSObject, MTKViewDelegate {
         self.state = state
     }
 
+    /// Einmal gebaute Pipeline, für die ganze Programmlaufzeit.
+    ///
+    /// `makeLibrary(source:)` kompiliert den Shader zur Laufzeit aus dem
+    /// Quelltext, das kostet 30 bis 150 ms auf dem Hauptthread. Die MTKView wird
+    /// aber jedes Mal ab- und wieder aufgebaut, wenn das Overlay verschwindet
+    /// oder ein Hinweis erscheint. Ohne diesen Zwischenspeicher fiele die
+    /// Kompilierung genau beim Fn-Druck an, also wenn das Overlay sofort da sein
+    /// soll. `nil` = schon einmal versucht und fehlgeschlagen.
+    private static var sharedPipeline: (pipeline: MTLRenderPipelineState, queue: MTLCommandQueue)?
+    private static var setupFailed = false
+
     /// true, wenn die Pipeline steht. false heißt: Der Orb kann nicht gezeichnet
     /// werden (Aufrufer fällt dann auf den Pill-Stil zurück).
     @discardableResult
     func setup(device: MTLDevice) -> Bool {
+        if let shared = Self.sharedPipeline {
+            pipeline = shared.pipeline
+            queue = shared.queue
+            return true
+        }
+        guard !Self.setupFailed else { return false }
         do {
             let lib = try device.makeLibrary(source: OrbShader.source, options: nil)
             let desc = MTLRenderPipelineDescriptor()
@@ -208,10 +225,17 @@ final class OrbRenderer: NSObject, MTKViewDelegate {
             att.sourceAlphaBlendFactor = .one
             att.destinationRGBBlendFactor = .oneMinusSourceAlpha
             att.destinationAlphaBlendFactor = .oneMinusSourceAlpha
-            pipeline = try device.makeRenderPipelineState(descriptor: desc)
-            queue = device.makeCommandQueue()
-            return queue != nil
+            let builtPipeline = try device.makeRenderPipelineState(descriptor: desc)
+            guard let builtQueue = device.makeCommandQueue() else {
+                Self.setupFailed = true
+                return false
+            }
+            Self.sharedPipeline = (builtPipeline, builtQueue)
+            pipeline = builtPipeline
+            queue = builtQueue
+            return true
         } catch {
+            Self.setupFailed = true
             NSLog("Orbly: Orb-Shader-Kompilierung fehlgeschlagen: \(error)")
             return false
         }

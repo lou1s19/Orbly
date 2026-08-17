@@ -72,10 +72,29 @@ enum History {
         }
     }
 
+
+    /// Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
+    /// Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
+    /// 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+    ///
+    /// Bewusst auch für BESTEHENDE Dateien: Wer schon diktiert hat, hätte sonst
+    /// als Einziger weiter eine offene Datei, und genau das sind die Nutzer mit
+    /// Inhalt darin.
+    static func restrictPermissions() {
+        let fm = FileManager.default
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: AppSettings.appSupportDir.path)
+        if fm.fileExists(atPath: url.path) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } else {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
+    }
+
     static func clear() {
         queue.async {
             // Datei leeren statt löschen - der Verlauf-Tab erwartet sie.
             try? Data().write(to: url)
+            restrictPermissions() // write(to:) legt neu an, mit Standardrechten
             // Die alte Verlauf.md mit weg, sonst bleibt Klartext liegen,
             // den der Nutzer für gelöscht hält.
             try? FileManager.default.removeItem(at: legacyURL)
@@ -100,6 +119,7 @@ enum History {
         guard kept.count != lines.count else { return }
         let output = kept.isEmpty ? "" : kept.joined(separator: "\n") + "\n"
         try? Data(output.utf8).write(to: url)
+        restrictPermissions() // write(to:) legt neu an, mit Standardrechten
         NSLog("Orbly: Verlauf aufgeräumt - \(lines.count - kept.count) Einträge älter als \(days) Tage entfernt")
     }
 
@@ -112,16 +132,20 @@ enum History {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            handle.seekToEndOfFile()
-            handle.write(line)
-        } else {
-            do {
+        restrictPermissions()
+        // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
+        // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
+        // Eine volle Platte genau beim Speichern beendete damit die ganze App.
+        do {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: line)
+            } else {
                 try line.write(to: url)
-            } catch {
-                NSLog("Orbly: Verlauf konnte nicht gespeichert werden: \(error)")
             }
+        } catch {
+            NSLog("Orbly: Verlauf konnte nicht gespeichert werden: \(error)")
         }
     }
 
@@ -168,7 +192,7 @@ enum History {
         migrated.removeAll { $0.text == "(noch keine Diktate)" }
 
         try? fm.createDirectory(at: AppSettings.appSupportDir, withIntermediateDirectories: true)
-        fm.createFile(atPath: url.path, contents: nil)
+        fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
         migrated.forEach(appendLine)
 
         // Erst prüfen, dann löschen. `appendLine` schluckt Schreibfehler (volle

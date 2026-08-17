@@ -54,4 +54,43 @@ final class SettingsTests: XCTestCase {
             )
         }
     }
+
+    // MARK: - Timer im .common-Modus
+
+    /// `Timer.scheduledTimer` hängt nur im `.default`-Modus und steht still,
+    /// sobald ein Menü offen ist oder gescrollt wird. Genau dann sollen der
+    /// Fn-Wächter und das Aufnahme-Zeitlimit aber weiterlaufen.
+    /// Der eigentliche Fehler war nicht der Timer selbst, sondern die falsche
+    /// Fabrikmethode an fünf Stellen. Genau das prüft dieser Test: In `Sources`
+    /// darf `Timer.scheduledTimer` nicht mehr vorkommen, sonst steht das
+    /// Sicherheitsnetz wieder still, sobald ein Menü offen ist.
+    func testKeinScheduledTimerMehrImQuelltext() throws {
+        let quellen = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Orbly")
+        let dateien = try FileManager.default
+            .contentsOfDirectory(at: quellen, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" }
+        XCTAssertFalse(dateien.isEmpty, "Quelldateien nicht gefunden unter \(quellen.path)")
+
+        for datei in dateien {
+            let inhalt = try String(contentsOf: datei, encoding: .utf8)
+            for (nr, zeile) in inhalt.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                guard !zeile.trimmingCharacters(in: .whitespaces).hasPrefix("//") else { continue }
+                XCTAssertFalse(
+                    zeile.contains("Timer.scheduledTimer"),
+                    "\(datei.lastPathComponent):\(nr + 1) nutzt Timer.scheduledTimer statt Timer.scheduledCommon"
+                )
+            }
+        }
+    }
+
+    func testScheduledCommonUebernimmtToleranz() {
+        let timer = Timer.scheduledCommon(every: 30, repeats: true, tolerance: 10) { _ in }
+        defer { timer.invalidate() }
+        XCTAssertEqual(timer.tolerance, 10, accuracy: 0.001)
+        XCTAssertTrue(timer.isValid)
+    }
 }

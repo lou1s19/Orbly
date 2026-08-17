@@ -48,4 +48,46 @@ final class TranscriberTests: XCTestCase {
     func testKeinLeerzeichenVerlorenBeiTabsUndUmbruechen() {
         XCTAssertEqual(Transcriber.joinSegments(" Eins\t\n Zwei"), "Eins Zwei")
     }
+
+    // MARK: - cleanup: whisper-Platzhalter bei Stille
+
+    /// Der frühere Ausdruck verlangte, dass der GESAMTE Text eine Klammergruppe
+    /// ist. Geht die Stille über mehr als eine Segmentgrenze (ca. 30 s), liefert
+    /// whisper mehrere, und die landeten wörtlich im Dokument.
+    func testMehrfachesBlankAudioWirdEntfernt() {
+        XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n [BLANK_AUDIO]"), "")
+        XCTAssertEqual(Transcriber.cleanup(" (Musik)\n (Musik)"), "")
+    }
+
+    func testBlankAudioVorEchtemTextWirdEntfernt() {
+        XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n Hallo Welt"), "Hallo Welt")
+        XCTAssertEqual(Transcriber.cleanup(" Hallo Welt\n [BLANK_AUDIO]"), "Hallo Welt")
+    }
+
+    func testEinzelnerPlatzhalterWieBisher() {
+        XCTAssertEqual(Transcriber.cleanup("[BLANK_AUDIO]"), "")
+        XCTAssertEqual(Transcriber.cleanup(" (Musik)"), "")
+    }
+
+    func testEchterTextBleibtUnveraendert() {
+        XCTAssertEqual(Transcriber.cleanup(" Das ist ein Satz."), "Das ist ein Satz.")
+    }
+
+    /// Gegenprobe zum Aussortieren: Klammern MITTEN im Diktat sind gewollter
+    /// Text und dürfen nicht verschwinden. (Codex-Fund an der ersten Fassung
+    /// dieser Korrektur, die pauschal jede Klammergruppe entfernt hätte.)
+    func testKlammernImSatzBleibenErhalten() {
+        XCTAssertEqual(
+            Transcriber.cleanup(" Treffen (verschoben) auf Montag"),
+            "Treffen (verschoben) auf Montag"
+        )
+        XCTAssertEqual(Transcriber.cleanup(" Nimm array[index] her"), "Nimm array[index] her")
+    }
+
+    func testKlammerSegmentZwischenEchtenSegmenten() {
+        XCTAssertEqual(
+            Transcriber.cleanup(" Erster Teil\n [BLANK_AUDIO]\n zweiter Teil"),
+            "Erster Teil zweiter Teil"
+        )
+    }
 }

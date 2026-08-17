@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
     )
-    private enum DictationState {
+    private enum DictationState: Equatable {
         case idle
         case recording
         case processing
@@ -35,7 +35,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Spendenhinweis (siehe Donation.swift). Nur zeitweise offen.
     private var donationWindow: NSWindow?
 
-    private var state: DictationState = .idle
+    /// Einziger Ort, an dem der Diktat-Zustand wechselt. `didSet` hängt die
+    /// Tastenüberwachung daran, damit sie garantiert zu jedem Rückweg nach
+    /// `.idle` passt - es gibt sieben davon, einer wäre sonst irgendwann
+    /// vergessen worden.
+    private var state: DictationState = .idle {
+        didSet {
+            guard state != oldValue else { return }
+            let aktiv = state != .idle
+            // Nicht synchron: Der Wechsel nach .idle passiert oft IM Handler des
+            // keyDown-Monitors (Esc bricht ab). Ein NSEvent.removeMonitor auf den
+            // gerade laufenden Block waere undefiniertes Verhalten.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, (self.state != .idle) == aktiv else { return }
+                self.fnMonitor.setKeyMonitoringEnabled(aktiv)
+            }
+        }
+    }
     private var fnPressStarted: Date?
     private var toggleSession = false
     /// App, in der das Diktat gestartet wurde - nur dort wird eingefügt.
@@ -78,6 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             guard let self else { return }
             self.overlay.push(level: level)
             if self.onboarding.captureActive { self.onboarding.push(level: level) }
+            // Solange Ton hereinkommt, ist der Server in Gebrauch. Ohne das hier
+            // zählte nur der Aufnahme-START als Aktivität, und die Idle-Abschaltung
+            // beendete den Server nach 3 min mitten im Sprechen - ein längeres
+            // Diktat war danach komplett verloren.
+            self.localServer.noteActivity()
         }
 
         fnMonitor.onFnDown = { [weak self] in self?.handleFnDown() }
@@ -91,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             forName: AppSettings.changedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             self?.reconcileIfTranscriptionSettingsChanged()
+            self?.pruneHistoryOnSettingsChange()
             self?.applyLanguageIfChanged()
             self?.updateStatus()
         }
@@ -120,6 +142,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Nur bei wirklich relevanten Änderungen den Server anfassen. Vorher startete
     /// JEDE Einstellungsänderung (auch Overlay-Stil oder Position) einen per
     /// Idle-Abschaltung schlafend gelegten Server samt 650 MB Modell neu.
+    /// Der Verlauf altert nach drei Tagen aus. Das lief bisher nur beim Start
+    /// und beim Anhängen eines Diktats. Wer das Mitschreiben ausschaltet, hätte
+    /// seine alten Klartext-Diktate in einer wochenlang laufenden App also
+    /// unbegrenzt behalten.
+    private func pruneHistoryOnSettingsChange() {
+        guard !AppSettings.shared.historyEnabled else { return }
+        History.pruneOldEntries()
+    }
+
     private func reconcileIfTranscriptionSettingsChanged() {
         let current = AppSettings.shared.transcriptionSettingsFingerprint
         guard current != lastServerSettings else { return }
@@ -234,9 +265,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard notification.object as? NSWindow === onboardingWindow else { return }
+        let closing = notification.object as? NSWindow
+        if closing === donationWindow {
+            // Erst nach dem Schliessen loslassen: Das hier ist die letzte starke
+            // Referenz, und AppKit arbeitet nach windowWillClose noch weiter.
+            DispatchQueue.main.async { [weak self] in self?.donationWindow = nil }
+            return
+        }
+        guard closing === onboardingWindow else { return }
         onboarding.captureActive = false
         AppSettings.shared.onboardingCompleted = true
+        // Fenster wirklich loslassen. Sonst überlebt der ganze SwiftUI-Baum der
+        // Tour die Sitzung, samt laufender Hintergrund-Animation.
+        DispatchQueue.main.async { [weak self] in self?.onboardingWindow = nil }
     }
 
     // MARK: - Spendenhinweis
@@ -265,6 +306,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.isReleasedWhenClosed = false
         // Wie die Tour: immer dunkel, damit die Ampel-Buttons passen.
         window.appearance = NSAppearance(named: .darkAqua)
+        // Ohne Delegate merkt niemand, wenn der rote Ampel-Knopf das Fenster
+        // schließt: Die Referenz blieb stehen, der SwiftUI-Baum lebte weiter und
+        // seine Hintergrund-Animation lief den Rest der Sitzung mit.
+        window.delegate = self
         window.center()
         donationWindow = window
         window.makeKeyAndOrderFront(nil)
@@ -391,8 +436,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 self.localServer.startIfNeeded()
                 if coldStart { self.overlay.setServerStarting(true) }
                 self.maxDurationTimer?.invalidate()
-                self.maxDurationTimer = Timer.scheduledTimer(
-                    withTimeInterval: self.maxRecordingSeconds, repeats: false
+                self.maxDurationTimer = Timer.scheduledCommon(
+                    every: self.maxRecordingSeconds, repeats: false
                 ) { [weak self] _ in
                     self?.stopAndTranscribe()
                 }
@@ -417,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // nie - dann verhält sich die App wie vorher, statt jedes Diktat nach
         // 0,4 s abzuwürgen.
         var sawFnHeld = false
-        fnWatchdog = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+        fnWatchdog = Timer.scheduledCommon(every: 0.4, repeats: true) { [weak self] _ in
             guard let self else { return }
             guard self.state == .recording, !self.toggleSession else { return }
             if NSEvent.modifierFlags.contains(.function) {
@@ -515,6 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // JETZT festgehalten: Wird die Tour während der Transkription geschlossen,
         // würde das Testdiktat sonst als echtes Diktat eingefügt und gespeichert.
         let isOnboardingCapture = onboarding.captureActive
+        let wasTruncated = recorder.lastRecordingWasTruncated
         dictationSession += 1
         let session = dictationSession
         let recordedSeconds = recorder.lastDurationSeconds
@@ -522,14 +568,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // Modell - erst senden, wenn der Port offen ist (sonst Connection refused).
         localServer.waitUntilReady { [weak self] ready in
             guard let self else { return }
-            // Immer zurücksetzen, auch beim Abbruch: Sonst pulsiert das Overlay
-            // den Rest der Sitzung im „Server startet"-Zustand.
-            self.overlay.setServerStarting(false)
-            // Abgebrochen (Esc) oder längst ein neues Diktat gestartet.
+            // Abgebrochen (Esc) oder längst ein neues Diktat gestartet. Die
+            // Aufnahme muss trotzdem weg, sie ist eine rohe Sprachdatei.
+            // `setServerStarting` gehört NACH diese Prüfung: Ein Nachzügler
+            // hätte sonst das Pulsieren des neuen Diktats abgeschaltet.
             guard session == self.dictationSession else {
                 try? FileManager.default.removeItem(at: wavURL)
                 return
             }
+            // Immer zurücksetzen, auch bei Misserfolg: Sonst pulsiert das Overlay
+            // den Rest der Sitzung im „Server startet"-Zustand.
+            self.overlay.setServerStarting(false)
             guard ready else {
                 // Die Aufnahme wird sonst erst im Transcriber gelöscht - der hier
                 // nie dran kommt. Rohe Sprachaufnahme darf nicht liegen bleiben.
@@ -541,13 +590,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             self.runTranscription(
                 wavURL: wavURL, recordedSeconds: recordedSeconds,
-                session: session, isOnboardingCapture: isOnboardingCapture
+                session: session, isOnboardingCapture: isOnboardingCapture,
+                wasTruncated: wasTruncated
             )
         }
     }
 
     private func runTranscription(
-        wavURL: URL, recordedSeconds: Double, session: Int, isOnboardingCapture: Bool
+        wavURL: URL, recordedSeconds: Double, session: Int, isOnboardingCapture: Bool,
+        wasTruncated: Bool
     ) {
         transcriber.transcribe(wavURL: wavURL) { [weak self] result in
             guard let self else { return }
@@ -561,15 +612,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // Statistik, kein Verlauf - es ist ein Test, kein echtes Diktat.
                 if isOnboardingCapture {
                     self.overlay.hide()
-                    if text.isEmpty {
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         self.onboarding.fail(L10n.t("onboarding.try.empty"))
                     } else {
                         self.onboarding.finish(text: text)
                     }
                     return
                 }
-                if text.isEmpty {
-                    self.overlay.hide()
+                // Leeres Ergebnis nicht kommentarlos verschlucken: Wer zu leise
+                // spricht oder ein stummes Mikrofon hat, sah das Overlay sonst
+                // einfach verschwinden und wusste nicht, woran es lag.
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.overlay.showHint(L10n.t("overlay.hint.nothingHeard"), symbol: "waveform.slash")
                     return
                 }
                 Stats.record(text: text, seconds: recordedSeconds)
@@ -601,10 +655,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                             L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
                         )
                     }
+                    // Wurde die Aufnahme an einem Gerätewechsel abgeschnitten,
+                    // fehlt der zweite Teil des Diktats. Das gehört gesagt.
+                    let showTruncatedHint = { [weak self] in
+                        guard let self, session == self.dictationSession else { return }
+                        self.overlay.showHint(
+                            L10n.t("overlay.hint.deviceChanged"), symbol: "mic.badge.xmark"
+                        )
+                    }
                     TextInserter.insert(text, targetApp: self.dictationTargetApp) { outcome in
                         switch outcome {
                         case .inserted:
-                            break
+                            if wasTruncated { showTruncatedHint() }
                         case .appSwitched, .noTextField:
                             showClipboardHint()
                         case .noPermission:
@@ -615,6 +677,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     }
                 } else {
                     TextInserter.copyToClipboard(text)
+                    if wasTruncated {
+                        self.overlay.showHint(
+                            L10n.t("overlay.hint.deviceChanged"), symbol: "mic.badge.xmark"
+                        )
+                    }
                 }
             case .failure(let error):
                 self.report(error: error.localizedDescription)
@@ -657,7 +724,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusMenuItem = NSMenuItem(title: L10n.t("menu.ready"), action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
-        ramMenuItem = NSMenuItem(title: L10n.t("menu.ram", "–"), action: nil, keyEquivalent: "")
+        ramMenuItem = NSMenuItem(title: L10n.t("menu.ram", "..."), action: nil, keyEquivalent: "")
         ramMenuItem.isEnabled = false
         menu.addItem(ramMenuItem)
         menu.addItem(.separator())

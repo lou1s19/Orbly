@@ -10,7 +10,9 @@ import Foundation
 /// ein aktives Modell, das in der Liste gar nicht mehr auftaucht.
 struct WhisperModel: Identifiable {
     let id: String
-    let displayName: String
+    /// Ohne Sprach-Präfix. Das kommt aus `language` und wird übersetzt, siehe
+    /// `displayName`.
+    let baseName: String
     let fileName: String
     let sizeMB: Int
     /// L10n-Key für die Qualitäts-Kurzbeschreibung.
@@ -37,7 +39,7 @@ struct WhisperModel: Identifiable {
         language: String? = nil, legacy: Bool = false
     ) {
         self.id = id
-        self.displayName = displayName
+        self.baseName = displayName
         self.fileName = fileName
         self.sizeMB = sizeMB
         self.qualityKey = qualityKey
@@ -51,6 +53,13 @@ struct WhisperModel: Identifiable {
     /// Stand 2026-08-03 geprüft. Beim Aktualisieren die SHA-256 der betroffenen
     /// Dateien mit erneuern, sonst schlägt der Download fehl (das ist Absicht).
     static let whisperCppRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+
+    /// „Deutsch: Large v3 Turbo". Der Sprachname wurde vorher hart auf Deutsch
+    /// bzw. Englisch geschrieben, ein französischer Nutzer las also „Deutsch:".
+    var displayName: String {
+        guard let language else { return baseName }
+        return "\(L10n.t("model.language.\(language)")): \(baseName)"
+    }
 
     var url: URL {
         URL(string: "https://huggingface.co/\(repo)/resolve/\(revision)/\(fileName)")!
@@ -103,7 +112,7 @@ final class ModelManager: NSObject, ObservableObject {
     /// vorhandenen sind large-v2-basiert (3 GB) und damit RAM-technisch sinnlos.
     static let languageSpecific: [WhisperModel] = [
         WhisperModel(
-            id: "large-v3-turbo-german-q5_0", displayName: "Deutsch: Large v3 Turbo",
+            id: "large-v3-turbo-german-q5_0", displayName: "Large v3 Turbo",
             fileName: "ggml-large-v3-turbo-german-q5_0.bin",
             revision: "8ca650615c50e0d16a49de2bf707d2791242d829", sha256: "15e92e3db0993c52fffa781513eec9253475331c1be808f8fb409285c9d9d030",
             sizeMB: 574, qualityKey: "model.quality.german",
@@ -111,13 +120,13 @@ final class ModelManager: NSObject, ObservableObject {
             language: "de"
         ),
         WhisperModel(
-            id: "small.en-q5_1", displayName: "English: Small",
+            id: "small.en-q5_1", displayName: "Small",
             fileName: "ggml-small.en-q5_1.bin",
             sha256: "bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30",
             sizeMB: 190, qualityKey: "model.quality.englishSmall", language: "en"
         ),
         WhisperModel(
-            id: "base.en-q5_1", displayName: "English: Base",
+            id: "base.en-q5_1", displayName: "Base",
             fileName: "ggml-base.en-q5_1.bin",
             sha256: "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f",
             sizeMB: 60, qualityKey: "model.quality.englishBase", language: "en"
@@ -157,7 +166,30 @@ final class ModelManager: NSObject, ObservableObject {
     /// Modelle, deren letzter Download fehlgeschlagen ist.
     @Published var failed: Set<String> = []
 
-    private var tasks: [Int: String] = [:] // taskIdentifier -> Modell-ID
+    /// taskIdentifier -> Modell-ID.
+    ///
+    /// Hinter einer Sperre, weil `delegateQueue: nil` heißt: URLSession ruft die
+    /// Delegate-Methoden auf einer eigenen Hintergrund-Queue auf. Start und
+    /// Abbruch eines Downloads kommen dagegen vom Hauptthread. Ein Swift-Dictionary
+    /// verträgt das nicht - beim Vergrößern wird der Puffer neu angelegt, und der
+    /// lesende Thread greift dann ins Freigegebene (Absturz).
+    private let tasksLock = NSLock()
+    private var tasksStorage: [Int: String] = [:]
+
+    private func modelID(forTask id: Int) -> String? {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        return tasksStorage[id]
+    }
+
+    private func setModelID(_ modelID: String?, forTask id: Int) {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        tasksStorage[id] = modelID
+    }
+
+    private func taskID(forModel modelID: String) -> Int? {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        return tasksStorage.first { $0.value == modelID }?.key
+    }
     private lazy var session = URLSession(
         configuration: .default, delegate: self, delegateQueue: nil
     )
@@ -230,16 +262,16 @@ final class ModelManager: NSObject, ObservableObject {
         failed.remove(model.id)
         progress[model.id] = 0
         let task = session.downloadTask(with: model.url)
-        tasks[task.taskIdentifier] = model.id
+        setModelID(model.id, forTask: task.taskIdentifier)
         task.resume()
     }
 
     func cancelDownload(_ model: WhisperModel) {
-        guard let id = tasks.first(where: { $0.value == model.id })?.key else { return }
+        guard let id = taskID(forModel: model.id) else { return }
         session.getAllTasks { all in
             all.first { $0.taskIdentifier == id }?.cancel()
         }
-        tasks[id] = nil
+        setModelID(nil, forTask: id)
         DispatchQueue.main.async { self.progress[model.id] = nil }
     }
 
@@ -257,7 +289,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard let id = tasks[downloadTask.taskIdentifier], totalBytesExpectedToWrite > 0 else { return }
+        guard let id = modelID(forTask: downloadTask.taskIdentifier), totalBytesExpectedToWrite > 0 else { return }
         let value = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         DispatchQueue.main.async { self.progress[id] = value }
     }
@@ -278,7 +310,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         _ session: URLSession, downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard let id = tasks[downloadTask.taskIdentifier],
+        guard let id = modelID(forTask: downloadTask.taskIdentifier),
               let model = Self.all.first(where: { $0.id == id }) else { return }
 
         // Ein HTTP-Fehler landet sonst als "Modell" auf der Platte: URLSession
@@ -340,8 +372,8 @@ extension ModelManager: URLSessionDownloadDelegate {
     func urlSession(
         _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
     ) {
-        guard let id = tasks[task.taskIdentifier] else { return }
-        tasks[task.taskIdentifier] = nil
+        guard let id = modelID(forTask: task.taskIdentifier) else { return }
+        setModelID(nil, forTask: task.taskIdentifier)
         DispatchQueue.main.async {
             self.progress[id] = nil
             if let error, (error as NSError).code != NSURLErrorCancelled {
