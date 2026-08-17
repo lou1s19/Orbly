@@ -34,10 +34,14 @@ final class Transcriber {
         return generation == self.generation
     }
 
-    private func setCurrentTask(_ task: URLSessionUploadTask?, generation: Int) {
+    /// Übernimmt die Task nur, wenn sie noch zum aktuellen Diktat gehört.
+    /// Liefert false, wenn inzwischen abgebrochen wurde - dann darf sie gar nicht
+    /// erst starten.
+    private func adoptTask(_ task: URLSessionUploadTask, generation: Int) -> Bool {
         lock.lock(); defer { lock.unlock() }
-        guard generation == self.generation else { return }
+        guard generation == self.generation else { return false }
         currentTask = task
+        return true
     }
 
     /// Bricht eine laufende Transkription ab (Esc während der Verarbeitung).
@@ -161,26 +165,36 @@ final class Transcriber {
             let text = Self.cleanup(rawText)
             DispatchQueue.main.async { completion(.success(text)) }
         }
-        setCurrentTask(task, generation: generation)
+        // Zwischen dem Bauen der Task und `resume()` kann Esc dazwischenkommen.
+        // Ohne diese Prüfung lief der Upload trotzdem los, obwohl der Nutzer
+        // abgebrochen hat - im Servermodus wäre die Aufnahme dann doch aus dem
+        // Haus gegangen.
+        guard adoptTask(task, generation: generation) else {
+            task.cancel()
+            return
+        }
         task.resume()
     }
 
     /// Removes whisper artifacts like "[BLANK_AUDIO]", "(Musik)" on silence.
     ///
-    /// Es wird JEDE Klammergruppe entfernt, nicht nur eine, die allein dasteht.
-    /// Vorher verlangte das Muster, dass der gesamte Text genau eine Gruppe ist.
-    /// Geht die Stille über mehr als eine Segmentgrenze (etwa 30 s), liefert
-    /// whisper "[BLANK_AUDIO] [BLANK_AUDIO]", und das landete wörtlich im
-    /// Dokument. Dasselbe bei Stille am Anfang eines Diktats.
+    /// Aussortiert wird pro SEGMENT, nicht über den ganzen Text. Whisper schreibt
+    /// so einen Platzhalter immer als eigenes Segment, also als eigene Zeile.
+    ///
+    /// Beide Nachbarlösungen wären falsch: Das frühere Muster verlangte, dass der
+    /// GESAMTE Text genau eine Klammergruppe ist, dann blieb bei Stille über mehr
+    /// als eine Segmentgrenze (ca. 30 s) "[BLANK_AUDIO] [BLANK_AUDIO]" im Text
+    /// stehen. Einfach jede Klammergruppe zu entfernen wäre auch falsch, dann
+    /// verlöre ein Diktat wie "Treffen (verschoben)" seinen Einschub.
     static func cleanup(_ raw: String) -> String {
-        let text = joinSegments(raw)
-        let artifactPattern = "[\\[\\(][^\\]\\)]*[\\]\\)]"
-        let stripped = text.replacingOccurrences(
-            of: artifactPattern, with: " ", options: .regularExpression
-        )
-        return stripped
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let artifactPattern = "^[\\[\\(][^\\]\\)]*[\\]\\)]$"
+        let echteSegmente = raw
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { segment in
+                let inhalt = segment.trimmingCharacters(in: .whitespaces)
+                return inhalt.range(of: artifactPattern, options: .regularExpression) == nil
+            }
+        return joinSegments(echteSegmente.joined(separator: "\n"))
     }
 
     /// whisper-server trennt Audio-Segmente per Zeilenumbruch - beim Diktieren

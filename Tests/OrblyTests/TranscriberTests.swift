@@ -72,4 +72,22 @@ final class TranscriberTests: XCTestCase {
     func testEchterTextBleibtUnveraendert() {
         XCTAssertEqual(Transcriber.cleanup(" Das ist ein Satz."), "Das ist ein Satz.")
     }
+
+    /// Gegenprobe zum Aussortieren: Klammern MITTEN im Diktat sind gewollter
+    /// Text und dürfen nicht verschwinden. (Codex-Fund an der ersten Fassung
+    /// dieser Korrektur, die pauschal jede Klammergruppe entfernt hätte.)
+    func testKlammernImSatzBleibenErhalten() {
+        XCTAssertEqual(
+            Transcriber.cleanup(" Treffen (verschoben) auf Montag"),
+            "Treffen (verschoben) auf Montag"
+        )
+        XCTAssertEqual(Transcriber.cleanup(" Nimm array[index] her"), "Nimm array[index] her")
+    }
+
+    func testKlammerSegmentZwischenEchtenSegmenten() {
+        XCTAssertEqual(
+            Transcriber.cleanup(" Erster Teil\n [BLANK_AUDIO]\n zweiter Teil"),
+            "Erster Teil zweiter Teil"
+        )
+    }
 }
