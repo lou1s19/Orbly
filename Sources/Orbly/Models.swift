@@ -157,7 +157,30 @@ final class ModelManager: NSObject, ObservableObject {
     /// Modelle, deren letzter Download fehlgeschlagen ist.
     @Published var failed: Set<String> = []
 
-    private var tasks: [Int: String] = [:] // taskIdentifier -> Modell-ID
+    /// taskIdentifier -> Modell-ID.
+    ///
+    /// Hinter einer Sperre, weil `delegateQueue: nil` heißt: URLSession ruft die
+    /// Delegate-Methoden auf einer eigenen Hintergrund-Queue auf. Start und
+    /// Abbruch eines Downloads kommen dagegen vom Hauptthread. Ein Swift-Dictionary
+    /// verträgt das nicht - beim Vergrößern wird der Puffer neu angelegt, und der
+    /// lesende Thread greift dann ins Freigegebene (Absturz).
+    private let tasksLock = NSLock()
+    private var tasksStorage: [Int: String] = [:]
+
+    private func modelID(forTask id: Int) -> String? {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        return tasksStorage[id]
+    }
+
+    private func setModelID(_ modelID: String?, forTask id: Int) {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        tasksStorage[id] = modelID
+    }
+
+    private func taskID(forModel modelID: String) -> Int? {
+        tasksLock.lock(); defer { tasksLock.unlock() }
+        return tasksStorage.first { $0.value == modelID }?.key
+    }
     private lazy var session = URLSession(
         configuration: .default, delegate: self, delegateQueue: nil
     )
@@ -230,16 +253,16 @@ final class ModelManager: NSObject, ObservableObject {
         failed.remove(model.id)
         progress[model.id] = 0
         let task = session.downloadTask(with: model.url)
-        tasks[task.taskIdentifier] = model.id
+        setModelID(model.id, forTask: task.taskIdentifier)
         task.resume()
     }
 
     func cancelDownload(_ model: WhisperModel) {
-        guard let id = tasks.first(where: { $0.value == model.id })?.key else { return }
+        guard let id = taskID(forModel: model.id) else { return }
         session.getAllTasks { all in
             all.first { $0.taskIdentifier == id }?.cancel()
         }
-        tasks[id] = nil
+        setModelID(nil, forTask: id)
         DispatchQueue.main.async { self.progress[model.id] = nil }
     }
 
@@ -257,7 +280,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
-        guard let id = tasks[downloadTask.taskIdentifier], totalBytesExpectedToWrite > 0 else { return }
+        guard let id = modelID(forTask: downloadTask.taskIdentifier), totalBytesExpectedToWrite > 0 else { return }
         let value = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         DispatchQueue.main.async { self.progress[id] = value }
     }
@@ -278,7 +301,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         _ session: URLSession, downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        guard let id = tasks[downloadTask.taskIdentifier],
+        guard let id = modelID(forTask: downloadTask.taskIdentifier),
               let model = Self.all.first(where: { $0.id == id }) else { return }
 
         // Ein HTTP-Fehler landet sonst als "Modell" auf der Platte: URLSession
@@ -340,8 +363,8 @@ extension ModelManager: URLSessionDownloadDelegate {
     func urlSession(
         _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
     ) {
-        guard let id = tasks[task.taskIdentifier] else { return }
-        tasks[task.taskIdentifier] = nil
+        guard let id = modelID(forTask: task.taskIdentifier) else { return }
+        setModelID(nil, forTask: task.taskIdentifier)
         DispatchQueue.main.async {
             self.progress[id] = nil
             if let error, (error as NSError).code != NSURLErrorCancelled {

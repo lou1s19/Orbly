@@ -8,21 +8,50 @@ final class Transcriber {
         var errorDescription: String? { message }
     }
 
-    /// Laufender Upload, damit Esc ihn wirklich abbrechen kann.
+    /// Laufender Upload (damit Esc ihn wirklich abbrechen kann) und die Nummer
+    /// des Diktats, zu dem er gehört.
+    ///
+    /// Beides liegt hinter einer Sperre: Der erste Versuch wird vom Hauptthread
+    /// gestartet, ein Wiederholungsversuch aber von einer Hintergrund-Queue, und
+    /// `cancelCurrent()` kommt wieder vom Hauptthread. Ohne Sperre schrieben zwei
+    /// Threads gleichzeitig auf dieselbe Referenz, was abstürzen kann.
+    ///
+    /// Ein Zähler statt eines Ja/Nein-Schalters, weil `transcribe()` den Schalter
+    /// zurücksetzte: Ein eingeplanter Wiederholungsversuch eines ABGEBROCHENEN
+    /// Diktats lief dadurch doch noch los und lud die Aufnahme hoch.
+    private let lock = NSLock()
     private var currentTask: URLSessionUploadTask?
-    /// Verhindert, dass ein eingeplanter Wiederholungsversuch nach dem Abbruch
-    /// noch losläuft.
-    private var cancelled = false
+    private var generation = 0
+
+    private func beginGeneration() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        generation += 1
+        return generation
+    }
+
+    private func isCurrent(_ generation: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return generation == self.generation
+    }
+
+    private func setCurrentTask(_ task: URLSessionUploadTask?, generation: Int) {
+        lock.lock(); defer { lock.unlock() }
+        guard generation == self.generation else { return }
+        currentTask = task
+    }
 
     /// Bricht eine laufende Transkription ab (Esc während der Verarbeitung).
     func cancelCurrent() {
-        cancelled = true
-        currentTask?.cancel()
+        lock.lock()
+        generation += 1
+        let task = currentTask
         currentTask = nil
+        lock.unlock()
+        task?.cancel()
     }
 
     func transcribe(wavURL: URL, completion: @escaping (Result<String, Error>) -> Void) {
-        cancelled = false
+        let generation = beginGeneration()
         let settings = AppSettings.shared
         guard let url = URL(string: settings.activeEndpoint) else {
             try? FileManager.default.removeItem(at: wavURL)
@@ -78,11 +107,11 @@ final class Transcriber {
         // Der lokale whisper-server braucht nach dem Start ein paar Sekunden zum
         // Modell-Laden und nimmt so lange keine Verbindungen an -> kurz wiederholen.
         let retries = settings.mode == .local ? 10 : 0
-        send(request, body: body, retriesLeft: retries, completion: completion)
+        send(request, body: body, retriesLeft: retries, generation: generation, completion: completion)
     }
 
     private func send(
-        _ request: URLRequest, body: Data, retriesLeft: Int,
+        _ request: URLRequest, body: Data, retriesLeft: Int, generation: Int,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] data, response, error in
@@ -94,8 +123,11 @@ final class Transcriber {
                     && (ns.code == NSURLErrorCannotConnectToHost || ns.code == NSURLErrorNetworkConnectionLost)
                 if serverNotUpYet && retriesLeft > 0 {
                     DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                        guard let self, !self.cancelled else { return }
-                        self.send(request, body: body, retriesLeft: retriesLeft - 1, completion: completion)
+                        guard let self, self.isCurrent(generation) else { return }
+                        self.send(
+                            request, body: body, retriesLeft: retriesLeft - 1,
+                            generation: generation, completion: completion
+                        )
                     }
                     return
                 }
@@ -129,18 +161,26 @@ final class Transcriber {
             let text = Self.cleanup(rawText)
             DispatchQueue.main.async { completion(.success(text)) }
         }
-        currentTask = task
+        setCurrentTask(task, generation: generation)
         task.resume()
     }
 
     /// Removes whisper artifacts like "[BLANK_AUDIO]", "(Musik)" on silence.
-    private static func cleanup(_ raw: String) -> String {
-        var text = joinSegments(raw)
-        let artifactPattern = "^[\\[\\(][^\\]\\)]*[\\]\\)]$"
-        if text.range(of: artifactPattern, options: .regularExpression) != nil {
-            text = ""
-        }
-        return text
+    ///
+    /// Es wird JEDE Klammergruppe entfernt, nicht nur eine, die allein dasteht.
+    /// Vorher verlangte das Muster, dass der gesamte Text genau eine Gruppe ist.
+    /// Geht die Stille über mehr als eine Segmentgrenze (etwa 30 s), liefert
+    /// whisper "[BLANK_AUDIO] [BLANK_AUDIO]", und das landete wörtlich im
+    /// Dokument. Dasselbe bei Stille am Anfang eines Diktats.
+    static func cleanup(_ raw: String) -> String {
+        let text = joinSegments(raw)
+        let artifactPattern = "[\\[\\(][^\\]\\)]*[\\]\\)]"
+        let stripped = text.replacingOccurrences(
+            of: artifactPattern, with: " ", options: .regularExpression
+        )
+        return stripped
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// whisper-server trennt Audio-Segmente per Zeilenumbruch - beim Diktieren
