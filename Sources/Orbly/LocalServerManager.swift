@@ -47,7 +47,10 @@ final class LocalServerManager {
 
     /// Prüft regelmäßig, ob der Server mangels Diktaten schlafen gehen darf.
     func startIdleWatch() {
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        idleTimer?.invalidate()
+        // Toleranz, damit macOS den Wächter mit anderen Timern bündeln kann: Er
+        // ist nie eilig, und ein Menüleisten-Programm läuft wochenlang mit.
+        idleTimer = Timer.scheduledCommon(every: 30, repeats: true, tolerance: 10) { [weak self] _ in
             guard let self, AppSettings.shared.serverIdleShutdown, self.isRunning,
                   Date().timeIntervalSince(self.lastActivity) > Self.idleLimit else { return }
             NSLog("Orbly: whisper-server nach \(Int(Self.idleLimit / 60)) min Inaktivität beendet (RAM freigegeben)")
@@ -64,7 +67,17 @@ final class LocalServerManager {
     /// seinen Speicher und belegt unseren Port, sodass der neue Server
     /// stillschweigend nicht starten kann. Abgeräumt wird nur, was eindeutig
     /// unseres ist: ein whisper-server auf genau unserem Port.
+    /// Waisen stammen immer aus einer FRÜHEREN Sitzung: Ein Server, den diese
+    /// App gestartet hat, hängt an ihr und wird beim Beenden mit abgeräumt.
+    /// Einmal pro Programmlauf zu suchen genügt deshalb. Vorher lief die Suche
+    /// bei jedem Fn-Druck mit, samt einer bis zu 1 s langen Wartezeit auf den
+    /// freien Port, und zwar auf dem Hauptthread, während das Overlay erscheinen
+    /// sollte.
+    private var didReapOrphans = false
+
     private func reapOrphanServers() {
+        guard !didReapOrphans else { return }
+        didReapOrphans = true
         let port = AppSettings.shared.localPort
         let pgrep = Process()
         pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
@@ -145,18 +158,29 @@ final class LocalServerManager {
     /// einer Idle-Abschaltung. completion läuft auf dem Main-Thread.
     /// Bricht ein laufendes `waitUntilReady` ab (Esc während der Verarbeitung) -
     /// sonst pollt es bis zu 90 s weiter, nur um das Ergebnis wegzuwerfen.
-    func cancelWait() { waitCancelled = true }
-    private var waitCancelled = false
+    func cancelWait() { waitGeneration += 1 }
+
+    /// Zähler statt Ja/Nein-Schalter: Ein Schalter wurde vom nächsten Diktat
+    /// wieder auf "nicht abgebrochen" gestellt, und eine längst abgebrochene
+    /// Warteschleife lief dann mit ihrer alten Completion weiter.
+    private var waitGeneration = 0
 
     func waitUntilReady(timeout: TimeInterval = 90, completion: @escaping (Bool) -> Void) {
-        waitCancelled = false
+        waitGeneration += 1
+        let generation = waitGeneration
         guard AppSettings.shared.mode == .local else {
             completion(true)
             return
         }
         let deadline = Date().addingTimeInterval(timeout)
         func poll() {
-            guard !waitCancelled else { return }
+            // Auch der Abbruch MUSS die Completion aufrufen. Dort steht das
+            // Löschen der WAV-Datei; kehrte man hier still zurück, blieb die rohe
+            // Sprachaufnahme im Temp-Ordner liegen.
+            guard generation == waitGeneration else {
+                completion(false)
+                return
+            }
             guard isRunning else {
                 completion(false) // Start fehlgeschlagen (Binary/Modell fehlt)
                 return
@@ -165,7 +189,10 @@ final class LocalServerManager {
             request.timeoutInterval = 2
             URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
                 DispatchQueue.main.async {
-                    guard self?.waitCancelled == false else { return }
+                    guard let self, generation == self.waitGeneration else {
+                        completion(false)
+                        return
+                    }
                     if response != nil {
                         completion(true) // irgendeine HTTP-Antwort = Port offen = bereit
                     } else if Date() > deadline {
@@ -249,7 +276,18 @@ final class LocalServerManager {
     func stop() {
         guard let p = process, p.isRunning else { return }
         p.terminationHandler = nil
-        p.terminate()
+        p.terminate() // SIGTERM
         process = nil
+        // Nicht einfach loslassen: Steckt der Server mitten in einer Inferenz,
+        // reagiert er nicht sofort auf SIGTERM. Ohne Nachfassen überlebt er das
+        // Beenden der App als Waise und hält seine ~650 MB, bis Orbly das nächste
+        // Mal startet. Das Warten muss synchron sein, weil dieser Weg auch aus
+        // `applicationWillTerminate` kommt - danach läuft nichts mehr.
+        // Ein Server, der abgeschaltet wird, ist im Normalfall untätig und sofort
+        // weg; die Schleife kostet dann nichts.
+        for _ in 0..<30 where p.isRunning { usleep(10_000) } // max. 0,3 s
+        guard p.isRunning else { return }
+        NSLog("Orbly: whisper-server reagiert nicht auf SIGTERM, wird hart beendet")
+        kill(p.processIdentifier, SIGKILL)
     }
 }

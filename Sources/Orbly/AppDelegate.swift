@@ -78,6 +78,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             guard let self else { return }
             self.overlay.push(level: level)
             if self.onboarding.captureActive { self.onboarding.push(level: level) }
+            // Solange Ton hereinkommt, ist der Server in Gebrauch. Ohne das hier
+            // zählte nur der Aufnahme-START als Aktivität, und die Idle-Abschaltung
+            // beendete den Server nach 3 min mitten im Sprechen - ein längeres
+            // Diktat war danach komplett verloren.
+            self.localServer.noteActivity()
         }
 
         fnMonitor.onFnDown = { [weak self] in self?.handleFnDown() }
@@ -391,8 +396,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 self.localServer.startIfNeeded()
                 if coldStart { self.overlay.setServerStarting(true) }
                 self.maxDurationTimer?.invalidate()
-                self.maxDurationTimer = Timer.scheduledTimer(
-                    withTimeInterval: self.maxRecordingSeconds, repeats: false
+                self.maxDurationTimer = Timer.scheduledCommon(
+                    every: self.maxRecordingSeconds, repeats: false
                 ) { [weak self] _ in
                     self?.stopAndTranscribe()
                 }
@@ -417,7 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // nie - dann verhält sich die App wie vorher, statt jedes Diktat nach
         // 0,4 s abzuwürgen.
         var sawFnHeld = false
-        fnWatchdog = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { [weak self] _ in
+        fnWatchdog = Timer.scheduledCommon(every: 0.4, repeats: true) { [weak self] _ in
             guard let self else { return }
             guard self.state == .recording, !self.toggleSession else { return }
             if NSEvent.modifierFlags.contains(.function) {
@@ -522,14 +527,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // Modell - erst senden, wenn der Port offen ist (sonst Connection refused).
         localServer.waitUntilReady { [weak self] ready in
             guard let self else { return }
-            // Immer zurücksetzen, auch beim Abbruch: Sonst pulsiert das Overlay
-            // den Rest der Sitzung im „Server startet"-Zustand.
-            self.overlay.setServerStarting(false)
-            // Abgebrochen (Esc) oder längst ein neues Diktat gestartet.
+            // Abgebrochen (Esc) oder längst ein neues Diktat gestartet. Die
+            // Aufnahme muss trotzdem weg, sie ist eine rohe Sprachdatei.
+            // `setServerStarting` gehört NACH diese Prüfung: Ein Nachzügler
+            // hätte sonst das Pulsieren des neuen Diktats abgeschaltet.
             guard session == self.dictationSession else {
                 try? FileManager.default.removeItem(at: wavURL)
                 return
             }
+            // Immer zurücksetzen, auch bei Misserfolg: Sonst pulsiert das Overlay
+            // den Rest der Sitzung im „Server startet"-Zustand.
+            self.overlay.setServerStarting(false)
             guard ready else {
                 // Die Aufnahme wird sonst erst im Transcriber gelöscht - der hier
                 // nie dran kommt. Rohe Sprachaufnahme darf nicht liegen bleiben.

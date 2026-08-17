@@ -13,6 +13,26 @@ enum MediaDictationMode: String {
     case pause  // pausieren, danach weiterspielen
 }
 
+extension Timer {
+    /// Wie `scheduledTimer`, aber im `.common`-Modus der Ereignisschleife.
+    ///
+    /// `Timer.scheduledTimer` hängt sich nur in `.default`. Sobald ein Menü offen
+    /// ist oder der Nutzer scrollt oder zieht, wechselt der RunLoop nach
+    /// `.eventTracking` und der Timer steht still. Für Sicherheitsnetze wie den
+    /// Fn-Wächter oder das Aufnahme-Zeitlimit ist genau das der falsche Moment
+    /// zum Pausieren.
+    static func scheduledCommon(
+        every interval: TimeInterval, repeats: Bool,
+        tolerance: TimeInterval = 0,
+        _ block: @escaping (Timer) -> Void
+    ) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats, block: block)
+        timer.tolerance = tolerance
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+}
+
 /// Sprachauswahl fürs Diktat - dieselbe Liste in Einstellungen und Erst-Tour.
 enum SupportedLanguages {
     static let dictationOptions: [(value: String, label: String)] = [

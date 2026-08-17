@@ -112,16 +112,19 @@ enum History {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            handle.seekToEndOfFile()
-            handle.write(line)
-        } else {
-            do {
+        // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
+        // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
+        // Eine volle Platte genau beim Speichern beendete damit die ganze App.
+        do {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: line)
+            } else {
                 try line.write(to: url)
-            } catch {
-                NSLog("Orbly: Verlauf konnte nicht gespeichert werden: \(error)")
             }
+        } catch {
+            NSLog("Orbly: Verlauf konnte nicht gespeichert werden: \(error)")
         }
     }
 

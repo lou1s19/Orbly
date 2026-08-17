@@ -59,8 +59,6 @@ final class OverlayState: ObservableObject {
     @Published var phase: OverlayPhase = .recording
     @Published var style: OverlayStyle = .pill
     @Published var startDate = Date()
-    /// Akkumulierte Orb-Rotation - Stimme beschleunigt die Drehung.
-    @Published var orbAngle: Double = 0
     /// Steuert u. a. das Pausieren des Metal-Renderings, wenn das Panel weg ist.
     @Published var overlayVisible = false
     /// Lokaler Server lädt gerade das Modell (Kaltstart nach Idle-Abschaltung) -
@@ -71,7 +69,6 @@ final class OverlayState: ObservableObject {
         guard !levels.isEmpty else { return }
         levels.removeFirst()
         levels.append(level)
-        orbAngle += Double(level) * 18
     }
 
     func reset(style: OverlayStyle) {
@@ -164,7 +161,7 @@ final class OverlayController {
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
-        hideTimer = Timer.scheduledTimer(withTimeInterval: 2.6, repeats: false) { [weak self] _ in
+        hideTimer = Timer.scheduledCommon(every: 2.6, repeats: false) { [weak self] _ in
             self?.hide()
         }
     }
@@ -177,7 +174,7 @@ final class OverlayController {
         panel.alphaValue = 1
         panel.orderFrontRegardless()
         hideTimer?.invalidate()
-        hideTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
+        hideTimer = Timer.scheduledCommon(every: 4.0, repeats: false) { [weak self] _ in
             self?.hide()
         }
     }
@@ -197,7 +194,7 @@ final class OverlayController {
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
-        hideTimer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: false) { [weak self] _ in
+        hideTimer = Timer.scheduledCommon(every: 1.6, repeats: false) { [weak self] _ in
             self?.hide()
         }
     }
@@ -228,8 +225,19 @@ final class OverlayController {
         return min(max(text + 90, 200), 620)
     }
 
+    /// Der Bildschirm, auf dem der Nutzer gerade arbeitet. Nicht `NSScreen.main`:
+    /// das ist "der Bildschirm mit dem Key-Window", und ein nonactivating panel
+    /// bekommt nie eins. Ohne Key-Window fällt macOS auf den Menüleisten-Bildschirm
+    /// zurück, das Overlay erschien dann am Zweitmonitor auf dem falschen Schirm.
+    private static var activeScreen: NSScreen? {
+        let mouse = NSEvent.mouseLocation
+        return NSScreen.screens.first { $0.frame.contains(mouse) }
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
+
     private func resizeAndPosition(_ size: CGSize) {
-        guard let screen = NSScreen.main else { return }
+        guard let screen = Self.activeScreen else { return }
         let f = screen.visibleFrame
         let marginY: CGFloat = 28
         let marginX: CGFloat = 24
@@ -264,21 +272,28 @@ struct OverlayRootView: View {
 
     var body: some View {
         Group {
-            if case .error(let msg) = state.phase {
-                ErrorView(message: msg)
-            } else if case .hint(let msg, let symbol) = state.phase {
-                HintFlashView(message: msg, symbol: symbol)
-            } else if state.phase == .ready {
-                ReadyFlashView()
-            } else {
-                switch state.style {
-                case .pill: PillView(state: state)
-                case .minimal: MinimalView(state: state)
-                case .orb, .orbMono: OrbView(state: state)
+            // Nichts zeichnen, solange das Panel weg ist. `orderOut` allein
+            // genügt nicht: AppKit bedient ein verstecktes Fenster weiter im
+            // Display-Zyklus, und `hide()` lässt `phase` auf `.processing`
+            // stehen. Die Punkte-Animation lief dadurch unsichtbar mit 60 fps
+            // bis zum Beenden der App weiter (gemessen: 13 % CPU im Leerlauf).
+            if state.overlayVisible {
+                if case .error(let msg) = state.phase {
+                    ErrorView(message: msg)
+                } else if case .hint(let msg, let symbol) = state.phase {
+                    HintFlashView(message: msg, symbol: symbol)
+                } else if state.phase == .ready {
+                    ReadyFlashView()
+                } else {
+                    switch state.style {
+                    case .pill: PillView(state: state)
+                    case .minimal: MinimalView(state: state)
+                    case .orb, .orbMono: OrbView(state: state)
+                    }
                 }
             }
         }
-        .modifier(ServerStartingPulse(active: state.serverStarting))
+        .modifier(ServerStartingPulse(active: state.overlayVisible && state.serverStarting))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
