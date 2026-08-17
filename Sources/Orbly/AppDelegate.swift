@@ -42,7 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var state: DictationState = .idle {
         didSet {
             guard state != oldValue else { return }
-            fnMonitor.setKeyMonitoringEnabled(state != .idle)
+            let aktiv = state != .idle
+            // Nicht synchron: Der Wechsel nach .idle passiert oft IM Handler des
+            // keyDown-Monitors (Esc bricht ab). Ein NSEvent.removeMonitor auf den
+            // gerade laufenden Block waere undefiniertes Verhalten.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, (self.state != .idle) == aktiv else { return }
+                self.fnMonitor.setKeyMonitoringEnabled(aktiv)
+            }
         }
     }
     private var fnPressStarted: Date?
@@ -260,7 +267,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func windowWillClose(_ notification: Notification) {
         let closing = notification.object as? NSWindow
         if closing === donationWindow {
-            donationWindow = nil
+            // Erst nach dem Schliessen loslassen: Das hier ist die letzte starke
+            // Referenz, und AppKit arbeitet nach windowWillClose noch weiter.
+            DispatchQueue.main.async { [weak self] in self?.donationWindow = nil }
             return
         }
         guard closing === onboardingWindow else { return }
@@ -268,7 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         AppSettings.shared.onboardingCompleted = true
         // Fenster wirklich loslassen. Sonst überlebt der ganze SwiftUI-Baum der
         // Tour die Sitzung, samt laufender Hintergrund-Animation.
-        onboardingWindow = nil
+        DispatchQueue.main.async { [weak self] in self?.onboardingWindow = nil }
     }
 
     // MARK: - Spendenhinweis
@@ -603,7 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // Statistik, kein Verlauf - es ist ein Test, kein echtes Diktat.
                 if isOnboardingCapture {
                     self.overlay.hide()
-                    if text.isEmpty {
+                    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         self.onboarding.fail(L10n.t("onboarding.try.empty"))
                     } else {
                         self.onboarding.finish(text: text)

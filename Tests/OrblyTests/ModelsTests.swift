@@ -106,4 +106,32 @@ final class ModelsTests: XCTestCase {
             XCTAssertFalse(model.displayName.contains("–"), "\(model.id): Halbgeviertstrich")
         }
     }
+
+    // MARK: - Anzeigename mit Sprach-Präfix
+
+    /// Der Sprachname stand vorher hart auf Deutsch bzw. Englisch im Modellnamen,
+    /// ein französischer Nutzer las also „Deutsch:". Jetzt kommt er aus `language`
+    /// und läuft über L10n.
+    func testSprachspezifischeModelleZeigenUebersetztesPraefix() {
+        for modell in ModelManager.languageSpecific {
+            guard let sprache = modell.language else {
+                XCTFail("\(modell.id): sprachspezifisches Modell ohne language")
+                continue
+            }
+            let praefix = L10n.t("model.language.\(sprache)")
+            XCTAssertNotEqual(praefix, "model.language.\(sprache)", "Schlüssel fehlt in L10n")
+            XCTAssertTrue(
+                modell.displayName.hasPrefix("\(praefix): "),
+                "\(modell.id): \(modell.displayName) beginnt nicht mit \(praefix)"
+            )
+            XCTAssertFalse(modell.baseName.contains(":"), "\(modell.id): Präfix steckt noch im Namen")
+        }
+    }
+
+    func testMehrsprachigeModelleHabenKeinPraefix() {
+        for modell in ModelManager.multilingual {
+            XCTAssertNil(modell.language, "\(modell.id) sollte mehrsprachig sein")
+            XCTAssertEqual(modell.displayName, modell.baseName)
+        }
+    }
 }

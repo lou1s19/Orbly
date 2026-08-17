@@ -67,12 +67,12 @@ final class LocalServerManager {
     /// seinen Speicher und belegt unseren Port, sodass der neue Server
     /// stillschweigend nicht starten kann. Abgeräumt wird nur, was eindeutig
     /// unseres ist: ein whisper-server auf genau unserem Port.
-    /// Waisen stammen immer aus einer FRÜHEREN Sitzung: Ein Server, den diese
-    /// App gestartet hat, hängt an ihr und wird beim Beenden mit abgeräumt.
-    /// Einmal pro Programmlauf zu suchen genügt deshalb. Vorher lief die Suche
-    /// bei jedem Fn-Druck mit, samt einer bis zu 1 s langen Wartezeit auf den
-    /// freien Port, und zwar auf dem Hauptthread, während das Overlay erscheinen
-    /// sollte.
+    ///
+    /// Läuft nur EINMAL pro Programmlauf: Waisen stammen immer aus einer früheren
+    /// Sitzung, ein Server dieser App hängt an ihr und wird beim Beenden mit
+    /// abgeräumt (siehe `stop()`). Vorher lief die Suche bei jedem Fn-Druck mit,
+    /// samt einer bis zu 1 s langen Wartezeit auf den freien Port, und zwar auf
+    /// dem Hauptthread, während das Overlay erscheinen sollte.
     private var didReapOrphans = false
 
     private func reapOrphanServers() {
@@ -273,21 +273,33 @@ final class LocalServerManager {
         }
     }
 
+    /// Beendet den Server und wartet, bis er wirklich weg ist.
+    ///
+    /// Das Warten muss sein: Steckt der Server mitten in einer Inferenz, reagiert
+    /// er nicht sofort auf SIGTERM. Ohne Nachfassen überlebt er das Beenden der
+    /// App als Waise und hält seine ~650 MB bis zum nächsten Orbly-Start.
+    /// Es muss außerdem synchron sein, weil dieser Weg auch aus
+    /// `applicationWillTerminate` kommt, danach läuft nichts mehr.
+    ///
+    /// `process` wird erst am Ende freigegeben. Stünde es vor dem Warten, meldete
+    /// `isRunning` in diesem Fenster false, obwohl der Prozess noch lebt und den
+    /// Port hält. `reconcile()` (stop, direkt gefolgt von startIfNeeded) wäre dann
+    /// still am bind gescheitert.
     func stop() {
-        guard let p = process, p.isRunning else { return }
+        guard let p = process, p.isRunning else {
+            process = nil
+            return
+        }
         p.terminationHandler = nil
         p.terminate() // SIGTERM
-        process = nil
-        // Nicht einfach loslassen: Steckt der Server mitten in einer Inferenz,
-        // reagiert er nicht sofort auf SIGTERM. Ohne Nachfassen überlebt er das
-        // Beenden der App als Waise und hält seine ~650 MB, bis Orbly das nächste
-        // Mal startet. Das Warten muss synchron sein, weil dieser Weg auch aus
-        // `applicationWillTerminate` kommt - danach läuft nichts mehr.
         // Ein Server, der abgeschaltet wird, ist im Normalfall untätig und sofort
         // weg; die Schleife kostet dann nichts.
         for _ in 0..<30 where p.isRunning { usleep(10_000) } // max. 0,3 s
-        guard p.isRunning else { return }
-        NSLog("Orbly: whisper-server reagiert nicht auf SIGTERM, wird hart beendet")
-        kill(p.processIdentifier, SIGKILL)
+        if p.isRunning {
+            NSLog("Orbly: whisper-server reagiert nicht auf SIGTERM, wird hart beendet")
+            kill(p.processIdentifier, SIGKILL)
+            for _ in 0..<20 where p.isRunning { usleep(10_000) } // max. 0,2 s
+        }
+        process = nil
     }
 }

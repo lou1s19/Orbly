@@ -511,7 +511,11 @@ struct DashboardView: View {
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let point):
-                                    let origin = geo[proxy.plotFrame!].origin
+                                    // Kein Force-Unwrap: plotFrame ist nil, solange
+                                    // das Diagramm keine Plot-Flaeche hat (erster
+                                    // Layout-Durchlauf, Fenstergroesse 0).
+                                    guard let plot = proxy.plotFrame else { return }
+                                    let origin = geo[plot].origin
                                     if let date: Date = proxy.value(atX: point.x - origin.x) {
                                         // +12h = zum NÄCHSTEN Tag runden statt abschneiden
                                         let day = Calendar.current.startOfDay(for: date.addingTimeInterval(12 * 3600))

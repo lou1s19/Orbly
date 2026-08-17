@@ -91,6 +91,27 @@ final class AppSettings {
 
     private init() {
         Self.migrateLegacyDefaultsIfNeeded(into: d)
+        Self.repairLegacyModelPathIfNeeded(into: d)
+    }
+
+    /// Eigener Durchgang mit eigenem Marker, ausdrücklich NICHT in
+    /// `migrateLegacyDefaultsIfNeeded`.
+    ///
+    /// Die Versionen 1.0.0 und 1.1.0 setzten deren Marker, BEVOR sie die Arbeit
+    /// machten. Wer damals umgestiegen ist, hat also Marker gleich true und
+    /// trotzdem einen `modelPath`, der noch auf `.../FlowWhisper/models/...`
+    /// zeigt. Genau diese Nutzer sehen dauerhaft „Modell fehlt", obwohl die
+    /// Datei beim Ordner-Umzug mitgewandert ist. Stünde die Reparatur hinter dem
+    /// alten Marker, erreichte sie ausgerechnet sie nicht.
+    private static func repairLegacyModelPathIfNeeded(into d: UserDefaults) {
+        let markerKey = "repairedLegacyModelPath"
+        guard !d.bool(forKey: markerKey) else { return }
+        if let old = d.string(forKey: "modelPath"), old.contains("/FlowWhisper/") {
+            let neu = old.replacingOccurrences(of: "/FlowWhisper/", with: "/Orbly/")
+            d.set(neu, forKey: "modelPath")
+            NSLog("Orbly: Modellpfad aus der FlowWhisper-Zeit korrigiert")
+        }
+        d.set(true, forKey: markerKey)
     }
 
     /// Einmalige Übernahme aller Einstellungen aus der Zeit vor der Umbenennung
@@ -100,15 +121,14 @@ final class AppSettings {
         guard !d.bool(forKey: markerKey) else { return }
         let legacyPlist = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Preferences/com.louis.flowwhisper.plist")
-        guard let legacy = NSDictionary(contentsOf: legacyPlist) as? [String: Any] else { return }
+        guard let legacy = NSDictionary(contentsOf: legacyPlist) as? [String: Any] else {
+            // Nichts zu übernehmen. Marker trotzdem setzen, sonst wird bei JEDEM
+            // Start erneut nach der alten Plist gesucht.
+            d.set(true, forKey: markerKey)
+            return
+        }
         for (key, value) in legacy where d.object(forKey: key) == nil {
             d.set(value, forKey: key)
-        }
-        // Der Ordner heißt jetzt Orbly (siehe appSupportDir). Ein übernommener
-        // modelPath zeigte sonst weiter auf .../FlowWhisper/models/... und der
-        // Nutzer sah „Modell fehlt", obwohl die Datei mitgewandert ist.
-        if let old = d.string(forKey: "modelPath"), old.contains("/FlowWhisper/") {
-            d.set(old.replacingOccurrences(of: "/FlowWhisper/", with: "/Orbly/"), forKey: "modelPath")
         }
         // Marker erst NACH getaner Arbeit setzen: Ein einmaliger Lesefehler hätte
         // die Übernahme sonst für immer verhindert.
