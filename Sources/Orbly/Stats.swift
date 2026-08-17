@@ -39,11 +39,21 @@ struct StatsArchive: Codable, Equatable {
     var words = 0
     var spokenSeconds: Double = 0
     var savedSeconds: Double = 0
-    /// Bis hierher ist alles schon verdichtet. Ohne diese Marke wurden nach
-    /// einem abgebrochenen Verdichten (Archiv geschrieben, Kürzen der
-    /// Einzeleinträge fehlgeschlagen) beim nächsten Lauf DIESELBEN Einträge
-    /// erneut aufaddiert, und die Gesamtzahlen blieben dauerhaft zu hoch.
-    var compactedUpTo: Date?
+    /// So viele Einträge am ANFANG von `stats.jsonl` stecken schon in den Zahlen
+    /// oben drüber.
+    ///
+    /// Verdichten braucht zwei Dateischreibvorgänge (Archiv, dann gekürzte
+    /// Einzelliste), und die gehen nicht gemeinsam atomar. Bricht es dazwischen
+    /// ab (Platte voll), stehen dieselben Einträge beim nächsten Lauf noch da und
+    /// wurden ohne diese Marke ein zweites Mal aufaddiert: Die Gesamtzahlen
+    /// blieben dauerhaft zu hoch.
+    ///
+    /// Bewusst eine Anzahl und kein Zeitstempel: Einträge stehen in der
+    /// Reihenfolge, in der sie geschrieben wurden, und diese Reihenfolge stimmt
+    /// auch dann noch, wenn die Systemuhr springt (Zeitumstellung, NTP-Korrektur).
+    /// Eine Zeitmarke hätte einen nach dem Rücksprung geschriebenen Eintrag
+    /// verworfen, ohne ihn je zu zählen.
+    var compactedPrefix = 0
 }
 
 /// Persistente Diktier-Statistik als JSON-Lines-Datei im App-Support-Ordner.
@@ -190,19 +200,27 @@ enum Stats {
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
         var newArchive = archive
         var kept: [DictationStat] = []
-        for entry in entries {
-            if entry.date < cutoff {
-                // Schon einmal verdichtet: nur noch wegwerfen, nicht erneut zählen.
-                if let done = archive.compactedUpTo, entry.date <= done { continue }
-                newArchive.dictations += 1
-                newArchive.words += entry.words
-                newArchive.spokenSeconds += entry.seconds
-                newArchive.savedSeconds += savedSeconds(for: entry)
-                newArchive.compactedUpTo = max(newArchive.compactedUpTo ?? entry.date, entry.date)
-            } else {
+        var verdichtet = 0
+        for (index, entry) in entries.enumerated() {
+            guard entry.date < cutoff else {
                 kept.append(entry)
+                continue
             }
+            verdichtet += 1
+            // Zwei Bedingungen, und beide müssen stimmen: Der Eintrag steht im
+            // schon verdichteten Anfangsstück UND er ist alt genug. Die zweite
+            // schützt den Fall „Kürzen hat geklappt, das zweite Schreiben des
+            // Archivs nicht": Danach stehen vorne junge Einträge, die auf keinen
+            // Fall verworfen werden dürfen.
+            if index < archive.compactedPrefix { continue }
+            newArchive.dictations += 1
+            newArchive.words += entry.words
+            newArchive.spokenSeconds += entry.seconds
+            newArchive.savedSeconds += savedSeconds(for: entry)
         }
+        // Geht das Kürzen gleich schief, ist genau dieses Anfangsstück beim
+        // nächsten Lauf schon gezählt.
+        newArchive.compactedPrefix = verdichtet
         return (newArchive, kept)
     }
 
@@ -216,10 +234,10 @@ enum Stats {
 
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            // Erst das Archiv schreiben, dann die Einzeleinträge kürzen. Bricht es
-            // dazwischen ab, sind Zahlen doppelt statt verloren - und beim
-            // nächsten Lauf ist der Zustand wieder konsistent, weil dieselben
-            // Einträge dann schon im Archiv stecken. Andersherum wären sie weg.
+            // Reihenfolge ist Absicht: erst das Archiv, dann die Einzeleinträge
+            // kürzen. Bricht es dazwischen ab, sind Zahlen doppelt statt verloren,
+            // und `compactedPrefix` sorgt dafür, dass der nächste Lauf sie nicht
+            // noch einmal zählt. Andersherum wären sie ersatzlos weg.
             guard let archiveData = try? JSONEncoder().encode(result.archive),
                   (try? archiveData.write(to: archiveURL)) != nil else {
                 NSLog("Orbly: Statistik-Archiv nicht schreibbar - Verdichten übersprungen")
@@ -228,7 +246,19 @@ enum Stats {
             let lines = result.kept.compactMap { try? encoder.encode($0) }
                 .compactMap { String(data: $0, encoding: .utf8) }
             let output = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
-            try? Data(output.utf8).write(to: url)
+            guard (try? Data(output.utf8).write(to: url)) != nil else {
+                NSLog("Orbly: Statistik-Einträge nicht kürzbar - Archiv merkt sich das")
+                return
+            }
+            // Gekürzt ist gekürzt: Das Anfangsstück steht nicht mehr in der Datei,
+            // die Marke muss zurück auf 0. Schlägt genau dieses Schreiben fehl,
+            // ist nichts kaputt: Die verbliebenen Einträge sind alle jünger als
+            // die Verdichtungsgrenze, und die Marke greift nur bei alten.
+            var aufgeraeumt = result.archive
+            aufgeraeumt.compactedPrefix = 0
+            if let data = try? JSONEncoder().encode(aufgeraeumt) {
+                try? data.write(to: archiveURL)
+            }
             restrictPermissions() // write(to:) legt neu an, mit Standardrechten
             cachedSummary = nil
             NSLog("Orbly: Statistik verdichtet - \(entries.count - result.kept.count) alte Einträge zusammengefasst")
