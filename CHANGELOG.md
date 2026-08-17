@@ -39,11 +39,23 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
   `[BLANK_AUDIO]` wird entfernt, leeres Ergebnis und abgeschnittene Aufnahmen sagen
   Bescheid (5 Sprachen), Aufnahmepuffer wird geleert, Verlauf/Statistik mit 0600,
   Tastenüberwachung nur noch während eines Diktats, vier Übersetzungsfehler behoben.
-- **Geprüft:** `swift build` ohne Warnung, `swift test` 68 grün (7 neu). Der
-  Gedankenstrich-Test deckt jetzt den ganzen Quelltext ab, nicht nur `L10n.swift` -
-  genau deshalb waren zwei durchgerutscht.
-- **Offen / Nächster Schritt:** Nach main mergen und als 1.1.1 releasen. Die
-  13-%-Dauerlast rechtfertigt ein Release für sich allein.
+- **Zwei Runden Gegenprüfung an den Korrekturen selbst**, beide fündig geworden:
+  Codex fand, dass die erste Fassung der `[BLANK_AUDIO]`-Korrektur pauschal jede
+  Klammergruppe entfernte („Treffen (verschoben)" hätte den Einschub verloren) und
+  ein Race zwischen Generationsprüfung und `task.resume()`. Ein unabhängiger
+  Review-Agent fand einen Force-Unwrap (`plotFrame!`, Absturz beim Überfahren des
+  Diagramms), dass die `modelPath`-Reparatur hinter dem alten Marker ausgerechnet
+  die Betroffenen nie erreicht hätte, und dass die neue Sichtbarkeits-Bindung die
+  MTKView pro Diktat neu aufbaut (Shader-Kompilierung auf dem Hauptthread beim
+  Fn-Druck, jetzt einmal pro Programmlauf zwischengespeichert). Alles behoben.
+- **Geprüft:** `swift build` ohne Warnung, `swift test` 76 grün (15 neu).
+  Der Gedankenstrich-Test deckt jetzt den ganzen Quelltext ab statt nur
+  `L10n.swift`, genau deshalb waren zwei durchgerutscht; ein zweiter Test verbietet
+  `Timer.scheduledTimer` im Quelltext. **Nachgemessen an der installierten App:
+  0,0 % CPU im Leerlauf** (vorher 10 bis 14 %).
+- **Offen / Nächster Schritt:** Als 1.1.1 releasen. Die Dauerlast und der
+  Datenverlust bei langen Diktaten rechtfertigen ein Release für sich allein.
+  Nicht gepusht, wartet auf Freigabe.
 
 ## 2026-08-17 (2) — Erkennen, dass gar nichts Text annimmt
 
