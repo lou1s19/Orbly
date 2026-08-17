@@ -39,6 +39,21 @@ struct StatsArchive: Codable, Equatable {
     var words = 0
     var spokenSeconds: Double = 0
     var savedSeconds: Double = 0
+    /// So viele Einträge am ANFANG von `stats.jsonl` stecken schon in den Zahlen
+    /// oben drüber.
+    ///
+    /// Verdichten braucht zwei Dateischreibvorgänge (Archiv, dann gekürzte
+    /// Einzelliste), und die gehen nicht gemeinsam atomar. Bricht es dazwischen
+    /// ab (Platte voll), stehen dieselben Einträge beim nächsten Lauf noch da und
+    /// wurden ohne diese Marke ein zweites Mal aufaddiert: Die Gesamtzahlen
+    /// blieben dauerhaft zu hoch.
+    ///
+    /// Bewusst eine Anzahl und kein Zeitstempel: Einträge stehen in der
+    /// Reihenfolge, in der sie geschrieben wurden, und diese Reihenfolge stimmt
+    /// auch dann noch, wenn die Systemuhr springt (Zeitumstellung, NTP-Korrektur).
+    /// Eine Zeitmarke hätte einen nach dem Rücksprung geschriebenen Eintrag
+    /// verworfen, ohne ihn je zu zählen.
+    var compactedPrefix = 0
 }
 
 /// Persistente Diktier-Statistik als JSON-Lines-Datei im App-Support-Ordner.
@@ -79,16 +94,38 @@ enum Stats {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
-        if let handle = try? FileHandle(forWritingTo: url) {
-            defer { try? handle.close() }
-            handle.seekToEndOfFile()
-            handle.write(line)
-        } else {
-            do {
+        restrictPermissions()
+        // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
+        // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
+        // Eine volle Platte genau beim Speichern beendete damit die ganze App.
+        do {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: line)
+            } else {
                 try line.write(to: url)
-            } catch {
-                NSLog("Orbly: Statistik konnte nicht gespeichert werden: \(error)")
             }
+        } catch {
+            NSLog("Orbly: Statistik konnte nicht gespeichert werden: \(error)")
+        }
+    }
+
+
+    /// Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
+    /// Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
+    /// 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+    ///
+    /// Bewusst auch für BESTEHENDE Dateien: Wer schon diktiert hat, hätte sonst
+    /// als Einziger weiter eine offene Datei, und genau das sind die Nutzer mit
+    /// Inhalt darin.
+    static func restrictPermissions() {
+        let fm = FileManager.default
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: AppSettings.appSupportDir.path)
+        if fm.fileExists(atPath: url.path) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } else {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
         }
     }
 
@@ -163,16 +200,27 @@ enum Stats {
         let cutoff = now.addingTimeInterval(-Double(days) * 86_400)
         var newArchive = archive
         var kept: [DictationStat] = []
-        for entry in entries {
-            if entry.date < cutoff {
-                newArchive.dictations += 1
-                newArchive.words += entry.words
-                newArchive.spokenSeconds += entry.seconds
-                newArchive.savedSeconds += savedSeconds(for: entry)
-            } else {
+        var verdichtet = 0
+        for (index, entry) in entries.enumerated() {
+            guard entry.date < cutoff else {
                 kept.append(entry)
+                continue
             }
+            verdichtet += 1
+            // Zwei Bedingungen, und beide müssen stimmen: Der Eintrag steht im
+            // schon verdichteten Anfangsstück UND er ist alt genug. Die zweite
+            // schützt den Fall „Kürzen hat geklappt, das zweite Schreiben des
+            // Archivs nicht": Danach stehen vorne junge Einträge, die auf keinen
+            // Fall verworfen werden dürfen.
+            if index < archive.compactedPrefix { continue }
+            newArchive.dictations += 1
+            newArchive.words += entry.words
+            newArchive.spokenSeconds += entry.seconds
+            newArchive.savedSeconds += savedSeconds(for: entry)
         }
+        // Geht das Kürzen gleich schief, ist genau dieses Anfangsstück beim
+        // nächsten Lauf schon gezählt.
+        newArchive.compactedPrefix = verdichtet
         return (newArchive, kept)
     }
 
@@ -186,10 +234,10 @@ enum Stats {
 
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            // Erst das Archiv schreiben, dann die Einzeleinträge kürzen. Bricht es
-            // dazwischen ab, sind Zahlen doppelt statt verloren - und beim
-            // nächsten Lauf ist der Zustand wieder konsistent, weil dieselben
-            // Einträge dann schon im Archiv stecken. Andersherum wären sie weg.
+            // Reihenfolge ist Absicht: erst das Archiv, dann die Einzeleinträge
+            // kürzen. Bricht es dazwischen ab, sind Zahlen doppelt statt verloren,
+            // und `compactedPrefix` sorgt dafür, dass der nächste Lauf sie nicht
+            // noch einmal zählt. Andersherum wären sie ersatzlos weg.
             guard let archiveData = try? JSONEncoder().encode(result.archive),
                   (try? archiveData.write(to: archiveURL)) != nil else {
                 NSLog("Orbly: Statistik-Archiv nicht schreibbar - Verdichten übersprungen")
@@ -198,7 +246,20 @@ enum Stats {
             let lines = result.kept.compactMap { try? encoder.encode($0) }
                 .compactMap { String(data: $0, encoding: .utf8) }
             let output = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
-            try? Data(output.utf8).write(to: url)
+            guard (try? Data(output.utf8).write(to: url)) != nil else {
+                NSLog("Orbly: Statistik-Einträge nicht kürzbar - Archiv merkt sich das")
+                return
+            }
+            // Gekürzt ist gekürzt: Das Anfangsstück steht nicht mehr in der Datei,
+            // die Marke muss zurück auf 0. Schlägt genau dieses Schreiben fehl,
+            // ist nichts kaputt: Die verbliebenen Einträge sind alle jünger als
+            // die Verdichtungsgrenze, und die Marke greift nur bei alten.
+            var aufgeraeumt = result.archive
+            aufgeraeumt.compactedPrefix = 0
+            if let data = try? JSONEncoder().encode(aufgeraeumt) {
+                try? data.write(to: archiveURL)
+            }
+            restrictPermissions() // write(to:) legt neu an, mit Standardrechten
             cachedSummary = nil
             NSLog("Orbly: Statistik verdichtet - \(entries.count - result.kept.count) alte Einträge zusammengefasst")
         }
@@ -207,6 +268,12 @@ enum Stats {
     // MARK: - Zwischenspeicher (nicht auf dem Main-Thread parsen)
 
     private static var cachedSummary: StatsSummary?
+
+    /// Nach „alle Daten löschen" aufrufen. Ohne das zeigte die Übersicht die
+    /// alten Zahlen bis zum nächsten Start weiter.
+    static func invalidateCache() {
+        queue.async { cachedSummary = nil }
+    }
 
     /// Liest und rechnet im Hintergrund, `completion` läuft auf dem Main-Thread.
     /// Vorher lief das synchron beim Öffnen des Fensters und wurde mit jeder

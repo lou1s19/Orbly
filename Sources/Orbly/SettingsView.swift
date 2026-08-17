@@ -135,7 +135,11 @@ struct SettingsView: View {
                     TextField(L10n.t("settings.serverURL"), text: $serverURL, prompt: Text("http://192.168.1.50:8643/inference"))
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: serverURL) { _, newValue in
+                            // Getrimmt speichern: Ein mitkopiertes Leerzeichen am
+                            // Ende machte die Adresse ungueltig, und der Fehler
+                            // fiel erst beim naechsten Diktat auf.
                             AppSettings.shared.serverURL = newValue
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
                         }
                     // Bei http:// auf einen entfernten Host geht die Aufnahme
                     // unverschlüsselt durchs Netz. Das muss dastehen, sonst
@@ -154,7 +158,12 @@ struct SettingsView: View {
                     TextField(L10n.t("settings.modelName"), text: $serverModelName)
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: serverModelName) { _, newValue in
+                            // Zeilenumbrueche raus: Der Wert geht unveraendert in
+                            // einen Multipart-Body, ein \r\n koennte ihn aufbrechen.
                             AppSettings.shared.serverModelName = newValue
+                                .replacingOccurrences(of: "\r", with: "")
+                                .replacingOccurrences(of: "\n", with: "")
+                                .trimmingCharacters(in: .whitespaces)
                         }
                 }
             }
@@ -177,7 +186,7 @@ struct SettingsView: View {
                 SettingsRow(label: L10n.t("settings.appLanguage")) {
                     GlassSegmented(
                         options: [
-                            ("auto", "Auto"), ("en", "EN"), ("de", "DE"),
+                            ("auto", L10n.t("settings.language.auto")), ("en", "EN"), ("de", "DE"),
                             ("es", "ES"), ("fr", "FR"), ("ru", "RU"),
                         ],
                         selection: $appLanguage,
@@ -214,10 +223,15 @@ struct SettingsView: View {
                         Button(L10n.t("settings.deleteAll.confirm.keepModels"), role: .destructive) {
                             AppSettings.deleteAllData(includingModels: false)
                             reloadFromSettings()
+                            // Ohne dieses Signal bleibt der laufende whisper-server
+                            // auf dem alten Modell, und offene Fenster zeigen
+                            // weiter die eben geloeschten Zahlen.
+                            AppSettings.shared.notifyChanged()
                         }
                         Button(L10n.t("settings.deleteAll.confirm.withModels"), role: .destructive) {
                             AppSettings.deleteAllData(includingModels: true)
                             reloadFromSettings()
+                            AppSettings.shared.notifyChanged()
                         }
                     } message: {
                         Text(L10n.t("settings.deleteAll.confirm.message"))
@@ -526,6 +540,18 @@ private struct UpdatesRow: View {
                 .controlSize(.small)
             }
         }
+        // Das Fenster lebt die ganze Sitzung, der @State-Startwert wird also nur
+        // ein einziges Mal gelesen. Ändert ein Sparkle-Dialog die Einstellung,
+        // zeigte der Schalter danach dauerhaft den Stand vom App-Start.
+        .onAppear(perform: reload)
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            reload()
+        }
+    }
+
+    private func reload() {
+        guard let updater = (NSApp.delegate as? AppDelegate)?.updaterController.updater else { return }
+        autoUpdate = updater.automaticallyChecksForUpdates
     }
 }
 

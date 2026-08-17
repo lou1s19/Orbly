@@ -134,7 +134,15 @@ final class StatsTests: XCTestCase {
         let entries = [stat("2026-01-01T10:00:00+02:00", words: 40, seconds: 20)]
         let erst = Stats.compacted(entries, into: StatsArchive(), olderThanDays: 30, now: now)
         let nochmal = Stats.compacted(erst.kept, into: erst.archive, olderThanDays: 30, now: now)
-        XCTAssertEqual(nochmal.archive, erst.archive, "Zweiter Lauf darf nichts verdoppeln")
+        // Verglichen werden die Zahlen, nicht die Buchhaltung: `compactedPrefix`
+        // MUSS hier von 1 auf 0 fallen. Der zweite Lauf bekommt `erst.kept`,
+        // also die schon gekürzte Liste - genau der Fall, in dem das
+        // Anfangsstück nicht mehr in der Datei steht.
+        XCTAssertEqual(nochmal.archive.dictations, erst.archive.dictations, "Zweiter Lauf darf nichts verdoppeln")
+        XCTAssertEqual(nochmal.archive.words, erst.archive.words, "Zweiter Lauf darf nichts verdoppeln")
+        XCTAssertEqual(nochmal.archive.spokenSeconds, erst.archive.spokenSeconds, accuracy: 0.001)
+        XCTAssertEqual(nochmal.archive.savedSeconds, erst.archive.savedSeconds, accuracy: 0.001)
+        XCTAssertEqual(nochmal.archive.compactedPrefix, 0)
     }
 
     // MARK: Datei-Format
@@ -160,5 +168,77 @@ final class StatsTests: XCTestCase {
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
         XCTAssertEqual(Set(fields.keys), ["date", "words", "characters", "seconds"])
+    }
+
+    // MARK: - Verdichten ist wiederholbar
+
+    /// Bricht das Verdichten nach dem Schreiben des Archivs ab (Platte voll),
+    /// stehen dieselben Einträge beim nächsten Lauf noch in stats.jsonl. Ohne
+    /// die Marke `compactedUpTo` wurden sie erneut aufaddiert, und die
+    /// Gesamtzahlen blieben dauerhaft zu hoch.
+    func testZweitesVerdichtenZaehltNichtDoppelt() {
+        let jetzt = Date()
+        let alt = DictationStat(
+            date: jetzt.addingTimeInterval(-40 * 86_400),
+            words: 100, characters: 500, seconds: 60
+        )
+        let erste = Stats.compacted([alt], into: StatsArchive(), olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(erste.archive.dictations, 1)
+        XCTAssertEqual(erste.archive.words, 100)
+        XCTAssertEqual(erste.archive.compactedPrefix, 1)
+        XCTAssertTrue(erste.kept.isEmpty)
+
+        // Zweiter Lauf mit denselben Einträgen (das Kürzen war fehlgeschlagen).
+        let zweite = Stats.compacted([alt], into: erste.archive, olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(zweite.archive.dictations, 1, "Eintrag wurde doppelt gezählt")
+        XCTAssertEqual(zweite.archive.words, 100, "Wörter wurden doppelt gezählt")
+        XCTAssertTrue(zweite.kept.isEmpty)
+    }
+
+    func testNeuerAlterEintragWirdWeiterhinVerdichtet() {
+        let jetzt = Date()
+        let frueh = DictationStat(
+            date: jetzt.addingTimeInterval(-60 * 86_400), words: 10, characters: 50, seconds: 6
+        )
+        let spaeter = DictationStat(
+            date: jetzt.addingTimeInterval(-40 * 86_400), words: 20, characters: 100, seconds: 12
+        )
+        let erste = Stats.compacted([frueh], into: StatsArchive(), olderThanDays: 30, now: jetzt)
+        let zweite = Stats.compacted([frueh, spaeter], into: erste.archive, olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(zweite.archive.dictations, 2)
+        XCTAssertEqual(zweite.archive.words, 30)
+    }
+
+    /// Der Grund für die Anzahl statt einer Zeitmarke: Springt die Systemuhr
+    /// zurück (Zeitumstellung, NTP-Korrektur), bekommt ein SPÄTER geschriebener
+    /// Eintrag einen älteren Zeitstempel. Eine Zeitmarke hätte ihn verworfen,
+    /// ohne ihn je zu zählen; die Reihenfolge in der Datei stimmt dagegen immer.
+    func testUhrRuecksprungVerliertKeinenEintrag() {
+        let jetzt = Date()
+        let zuerst = DictationStat(
+            date: jetzt.addingTimeInterval(-40 * 86_400), words: 10, characters: 50, seconds: 6
+        )
+        // Danach geschrieben, aber mit älterem Stempel als der erste.
+        let nachRuecksprung = DictationStat(
+            date: jetzt.addingTimeInterval(-50 * 86_400), words: 20, characters: 100, seconds: 12
+        )
+        let erste = Stats.compacted([zuerst], into: StatsArchive(), olderThanDays: 30, now: jetzt)
+        let zweite = Stats.compacted(
+            [zuerst, nachRuecksprung], into: erste.archive, olderThanDays: 30, now: jetzt
+        )
+        XCTAssertEqual(zweite.archive.dictations, 2, "Eintrag mit älterem Stempel ging verloren")
+        XCTAssertEqual(zweite.archive.words, 30)
+    }
+
+    /// Gegenprobe zum zweiten Archiv-Schreiben: Nach erfolgreichem Kürzen steht
+    /// die Marke wieder auf 0, junge Einträge dürfen nie übersprungen werden.
+    func testJungeEintraegeWerdenNieUebersprungen() {
+        let jetzt = Date()
+        let jung = DictationStat(date: jetzt, words: 5, characters: 25, seconds: 3)
+        var archiv = StatsArchive()
+        archiv.compactedPrefix = 3 // veraltete Marke, absichtlich zu groß
+        let ergebnis = Stats.compacted([jung], into: archiv, olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(ergebnis.kept.count, 1, "junger Eintrag wurde verworfen")
+        XCTAssertEqual(ergebnis.archive.compactedPrefix, 0)
     }
 }

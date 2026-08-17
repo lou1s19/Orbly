@@ -298,6 +298,9 @@ private struct SidebarMemoryView: View {
             if nowExpanded { refresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // Wie beim Timer unten: eingeklappt sind die Werte unsichtbar, und
+            // jedes refresh() startet einen echten /bin/ps-Prozess.
+            guard expanded else { return }
             refresh()
         }
         .onReceive(timer) { _ in
@@ -317,7 +320,7 @@ private struct SidebarMemoryView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text(bytes.map(MemoryUsage.format) ?? "–")
+            Text(bytes.map(MemoryUsage.format) ?? "...")
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .contentTransition(.numericText())
         }
@@ -508,7 +511,11 @@ struct DashboardView: View {
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let point):
-                                    let origin = geo[proxy.plotAreaFrame].origin
+                                    // Kein Force-Unwrap: plotFrame ist nil, solange
+                                    // das Diagramm keine Plot-Flaeche hat (erster
+                                    // Layout-Durchlauf, Fenstergroesse 0).
+                                    guard let plot = proxy.plotFrame else { return }
+                                    let origin = geo[plot].origin
                                     if let date: Date = proxy.value(atX: point.x - origin.x) {
                                         // +12h = zum NÄCHSTEN Tag runden statt abschneiden
                                         let day = Calendar.current.startOfDay(for: date.addingTimeInterval(12 * 3600))
@@ -588,7 +595,12 @@ private struct StatCard: View {
 // MARK: - Verlauf
 
 struct HistoryView: View {
-    @State private var entries = History.load()
+    /// Bewusst leer: Der Startwert eines @State wird bei JEDER Initialisierung
+    /// der View-Struct ausgewertet, auch wenn SwiftUI das Ergebnis gleich wieder
+    /// verwirft. Diese View wird bei jedem Überfahren der Seitenleiste neu
+    /// gebaut, und History.load() liest die ganze Datei synchron auf dem
+    /// Hauptthread. Gefüllt wird in onAppear.
+    @State private var entries: [HistoryEntry] = []
     @State private var copiedID: UUID?
     @State private var confirmClear = false
 

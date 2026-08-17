@@ -140,6 +140,10 @@ final class AudioRecorder {
         isRecording = true
     }
 
+    /// True, wenn die letzte Aufnahme an einem Gerätewechsel abgeschnitten wurde
+    /// (AirPods verbinden sich mitten im Diktat). Nur der Teil davor ist drin.
+    private(set) var lastRecordingWasTruncated = false
+
     /// Beendet die Aufnahme und liefert die WAV-Datei.
     @discardableResult
     func stop() -> StopResult {
@@ -152,7 +156,13 @@ final class AudioRecorder {
         engineBroken = false
 
         var recorded: [Int16] = []
-        samplesQueue.sync { recorded = samples }
+        // Puffer gleich mit leeren: Sonst hielt die App die kompletten Audiodaten
+        // des letzten Diktats (1,9 MB je Minute) bis zum nächsten Fn-Druck, bei
+        // einer Menüleisten-App also potenziell stundenlang.
+        samplesQueue.sync {
+            recorded = samples
+            samples.removeAll(keepingCapacity: false)
+        }
         lastDurationSeconds = Double(recorded.count) / targetFormat.sampleRate
         // Require at least 0.3 s of audio
         guard recorded.count > 4800 else {
@@ -160,6 +170,9 @@ final class AudioRecorder {
             // aufgenommen wurde nichts - das muss er erfahren.
             return broken ? .failed : .tooShort
         }
+        // Es wird nur der Teil VOR dem Gerätewechsel transkribiert. Das muss der
+        // Nutzer erfahren, sonst fehlt ihm die halbe Aufnahme ohne jeden Hinweis.
+        lastRecordingWasTruncated = broken
         if broken {
             NSLog("Orbly: Eingabegerät wechselte während der Aufnahme - transkribiere den Teil davor")
         }
@@ -171,6 +184,8 @@ final class AudioRecorder {
             return .file(url)
         } catch {
             NSLog("Orbly: WAV write failed: \(error)")
+            // Rohe Sprachaufnahme darf auch als Bruchstück nicht liegen bleiben.
+            try? FileManager.default.removeItem(at: url)
             return .failed
         }
     }
@@ -280,6 +295,8 @@ final class AudioRecorder {
         data.append("data".data(using: .ascii)!)
         data.append(le32(dataSize))
         samples.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
-        try data.write(to: url)
+        // Atomar: Scheitert das Schreiben (Platte voll), bleibt sonst eine halbe
+        // Sprachaufnahme im Temp-Ordner liegen, die niemand mehr löscht.
+        try data.write(to: url, options: .atomic)
     }
 }

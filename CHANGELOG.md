@@ -8,6 +8,43 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
 
 ---
 
+## 2026-08-17 (3) — Vollprüfung der App, alle Funde behoben
+
+- **Anlass:** Kompletter Fehler-Check über alle 23 Quelldateien, dazu Skripte, CI und
+  Paketierung. Ergebnis waren 5 kritische und 11 wichtige Befunde plus Kleinkram.
+  Branch `fix/vollpruefung-1.1.1`, zwei Commits.
+- **Die fünf schweren:**
+  1. `OverlayController.hide()` setzte `state.phase` nie zurück. Die Punkte-Animation
+     lief nach jedem Diktat unsichtbar mit 60 fps weiter, **gemessen 13 % CPU im
+     Leerlauf** für den Rest der Sitzung. Behoben, indem `OverlayRootView` seinen
+     Inhalt an `state.overlayVisible` bindet. Merksatz: Ein per `orderOut` verstecktes
+     Fenster ist für SwiftUI nicht weg.
+  2. `noteActivity()` zählte nur den Aufnahme-START. Die Idle-Abschaltung beendete den
+     Server nach 3 min mitten im Sprechen, **jedes Diktat über 3 Minuten war komplett
+     verloren**, mit Standardeinstellungen. Jetzt hält jeder Pegelwert den Server warm.
+  3. `Transcriber.currentTask`/`cancelled` unsynchronisiert und als Schalter statt
+     Zähler: Ein abgebrochenes Diktat konnte doch noch hochgeladen werden, ein späteres
+     Esc brach den falschen Upload ab. Jetzt Zähler hinter `NSLock`.
+  4. `ModelManager.tasks` wurde vom Hauptthread und der URLSession-Queue gleichzeitig
+     verändert (Absturzrisiko beim Modell-Download). Jetzt hinter einer Sperre.
+  5. `handle.write()` meldet Fehler per NSException, die Swift nicht fangen kann. Eine
+     volle Platte beendete die App hart. Jetzt `write(contentsOf:)`.
+- **Standardwerte, die aus der Entwicklungszeit stammten:** Diktatsprache stand fest auf
+  `de` (jede Installation weltweit bekam Deutsch und das deutsche Fine-Tune empfohlen),
+  die Server-Adresse auf `http://ubuntu-server:8643`. Beides korrigiert (`auto` bzw. leer).
+  ATS erlaubt weiter beliebige Adressen wegen LAN-Servern, aber für `huggingface.co` und
+  den Update-Feed ist TLS jetzt Pflicht.
+- **Sonst:** Spenden- und Tour-Fenster werden beim Schließen wirklich freigegeben,
+  `MediaController` liest vor `waitUntilExit` (Deadlock-Reihenfolge), mehrfaches
+  `[BLANK_AUDIO]` wird entfernt, leeres Ergebnis und abgeschnittene Aufnahmen sagen
+  Bescheid (5 Sprachen), Aufnahmepuffer wird geleert, Verlauf/Statistik mit 0600,
+  Tastenüberwachung nur noch während eines Diktats, vier Übersetzungsfehler behoben.
+- **Geprüft:** `swift build` ohne Warnung, `swift test` 68 grün (7 neu). Der
+  Gedankenstrich-Test deckt jetzt den ganzen Quelltext ab, nicht nur `L10n.swift` -
+  genau deshalb waren zwei durchgerutscht.
+- **Offen / Nächster Schritt:** Nach main mergen und als 1.1.1 releasen. Die
+  13-%-Dauerlast rechtfertigt ein Release für sich allein.
+
 ## 2026-08-17 (2) — Erkennen, dass gar nichts Text annimmt
 
 - **Gemacht:** `TextInserter` prüft vor dem ⌘V, ob im Ziel überhaupt etwas Text annimmt.
