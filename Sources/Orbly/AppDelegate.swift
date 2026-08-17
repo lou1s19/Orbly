@@ -605,7 +605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         switch outcome {
                         case .inserted:
                             break
-                        case .appSwitched:
+                        case .appSwitched, .noTextField:
                             showClipboardHint()
                         case .noPermission:
                             NSLog("Orbly: Auto-Einfügen blockiert - Bedienungshilfen fehlen")
