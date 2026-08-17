@@ -591,22 +591,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
                 self.overlay.hide()
                 if AppSettings.shared.autoInsert {
+                    // Ohne Rückmeldung wirkt das Diktat verloren: Der Text ist
+                    // nirgends aufgetaucht und liegt nur im Verborgenen in der
+                    // Zwischenablage. Läuft aber längst ein neues Diktat, gehört
+                    // die Stelle dessen Aufnahme-Overlay, nicht diesem Nachzügler.
+                    let showClipboardHint = { [weak self] in
+                        guard let self, session == self.dictationSession else { return }
+                        self.overlay.showHint(
+                            L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
+                        )
+                    }
                     TextInserter.insert(text, targetApp: self.dictationTargetApp) { outcome in
                         switch outcome {
                         case .inserted:
                             break
                         case .appSwitched:
-                            // Ohne Rückmeldung wirkt das Diktat verloren: Der Text
-                            // ist nirgends aufgetaucht und liegt nur im Verborgenen
-                            // in der Zwischenablage.
-                            self.overlay.showHint(
-                                L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
-                            )
+                            showClipboardHint()
                         case .noPermission:
                             NSLog("Orbly: Auto-Einfügen blockiert - Bedienungshilfen fehlen")
-                            self.overlay.showHint(
-                                L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
-                            )
+                            showClipboardHint()
                             self.promptAccessibilityOnce()
                         }
                     }
