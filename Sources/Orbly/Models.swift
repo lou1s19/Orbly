@@ -10,7 +10,9 @@ import Foundation
 /// ein aktives Modell, das in der Liste gar nicht mehr auftaucht.
 struct WhisperModel: Identifiable {
     let id: String
-    let displayName: String
+    /// Ohne Sprach-Präfix. Das kommt aus `language` und wird übersetzt, siehe
+    /// `displayName`.
+    let baseName: String
     let fileName: String
     let sizeMB: Int
     /// L10n-Key für die Qualitäts-Kurzbeschreibung.
@@ -37,7 +39,7 @@ struct WhisperModel: Identifiable {
         language: String? = nil, legacy: Bool = false
     ) {
         self.id = id
-        self.displayName = displayName
+        self.baseName = displayName
         self.fileName = fileName
         self.sizeMB = sizeMB
         self.qualityKey = qualityKey
@@ -51,6 +53,13 @@ struct WhisperModel: Identifiable {
     /// Stand 2026-08-03 geprüft. Beim Aktualisieren die SHA-256 der betroffenen
     /// Dateien mit erneuern, sonst schlägt der Download fehl (das ist Absicht).
     static let whisperCppRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+
+    /// „Deutsch: Large v3 Turbo". Der Sprachname wurde vorher hart auf Deutsch
+    /// bzw. Englisch geschrieben, ein französischer Nutzer las also „Deutsch:".
+    var displayName: String {
+        guard let language else { return baseName }
+        return "\(L10n.t("model.language.\(language)")): \(baseName)"
+    }
 
     var url: URL {
         URL(string: "https://huggingface.co/\(repo)/resolve/\(revision)/\(fileName)")!
@@ -103,7 +112,7 @@ final class ModelManager: NSObject, ObservableObject {
     /// vorhandenen sind large-v2-basiert (3 GB) und damit RAM-technisch sinnlos.
     static let languageSpecific: [WhisperModel] = [
         WhisperModel(
-            id: "large-v3-turbo-german-q5_0", displayName: "Deutsch: Large v3 Turbo",
+            id: "large-v3-turbo-german-q5_0", displayName: "Large v3 Turbo",
             fileName: "ggml-large-v3-turbo-german-q5_0.bin",
             revision: "8ca650615c50e0d16a49de2bf707d2791242d829", sha256: "15e92e3db0993c52fffa781513eec9253475331c1be808f8fb409285c9d9d030",
             sizeMB: 574, qualityKey: "model.quality.german",
@@ -111,13 +120,13 @@ final class ModelManager: NSObject, ObservableObject {
             language: "de"
         ),
         WhisperModel(
-            id: "small.en-q5_1", displayName: "English: Small",
+            id: "small.en-q5_1", displayName: "Small",
             fileName: "ggml-small.en-q5_1.bin",
             sha256: "bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30",
             sizeMB: 190, qualityKey: "model.quality.englishSmall", language: "en"
         ),
         WhisperModel(
-            id: "base.en-q5_1", displayName: "English: Base",
+            id: "base.en-q5_1", displayName: "Base",
             fileName: "ggml-base.en-q5_1.bin",
             sha256: "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f",
             sizeMB: 60, qualityKey: "model.quality.englishBase", language: "en"

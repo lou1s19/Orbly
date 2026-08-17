@@ -39,6 +39,11 @@ struct StatsArchive: Codable, Equatable {
     var words = 0
     var spokenSeconds: Double = 0
     var savedSeconds: Double = 0
+    /// Bis hierher ist alles schon verdichtet. Ohne diese Marke wurden nach
+    /// einem abgebrochenen Verdichten (Archiv geschrieben, Kürzen der
+    /// Einzeleinträge fehlgeschlagen) beim nächsten Lauf DIESELBEN Einträge
+    /// erneut aufaddiert, und die Gesamtzahlen blieben dauerhaft zu hoch.
+    var compactedUpTo: Date?
 }
 
 /// Persistente Diktier-Statistik als JSON-Lines-Datei im App-Support-Ordner.
@@ -79,6 +84,15 @@ enum Stats {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
+        // Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
+        // Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
+        // 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(
+                atPath: url.path, contents: nil,
+                attributes: [.posixPermissions: 0o600]
+            )
+        }
         // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
         // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
         // Eine volle Platte genau beim Speichern beendete damit die ganze App.
@@ -168,10 +182,13 @@ enum Stats {
         var kept: [DictationStat] = []
         for entry in entries {
             if entry.date < cutoff {
+                // Schon einmal verdichtet: nur noch wegwerfen, nicht erneut zählen.
+                if let done = archive.compactedUpTo, entry.date <= done { continue }
                 newArchive.dictations += 1
                 newArchive.words += entry.words
                 newArchive.spokenSeconds += entry.seconds
                 newArchive.savedSeconds += savedSeconds(for: entry)
+                newArchive.compactedUpTo = max(newArchive.compactedUpTo ?? entry.date, entry.date)
             } else {
                 kept.append(entry)
             }
@@ -210,6 +227,12 @@ enum Stats {
     // MARK: - Zwischenspeicher (nicht auf dem Main-Thread parsen)
 
     private static var cachedSummary: StatsSummary?
+
+    /// Nach „alle Daten löschen" aufrufen. Ohne das zeigte die Übersicht die
+    /// alten Zahlen bis zum nächsten Start weiter.
+    static func invalidateCache() {
+        queue.async { cachedSummary = nil }
+    }
 
     /// Liest und rechnet im Hintergrund, `completion` läuft auf dem Main-Thread.
     /// Vorher lief das synchron beim Öffnen des Fensters und wurde mit jeder

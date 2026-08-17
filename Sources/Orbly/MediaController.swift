@@ -105,12 +105,19 @@ final class MediaController {
         process.arguments = ["-e", source]
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        // nullDevice statt Pipe(): Eine Pipe, aus der niemand liest, läuft voll
+        // und blockiert dann den Kindprozess beim Schreiben.
+        process.standardError = FileHandle.nullDevice
         do {
             try process.run()
+            // Erst lesen, dann warten. Umgekehrt ist es die klassische
+            // Deadlock-Reihenfolge: Schreibt das Kind mehr als den Pipe-Puffer,
+            // wartet es aufs Leeren, während wir auf sein Ende warten. Diese
+            // serielle Queue stünde danach dauerhaft, die Musik käme nie zurück
+            // und das Beenden der App würde hängen.
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             return String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {

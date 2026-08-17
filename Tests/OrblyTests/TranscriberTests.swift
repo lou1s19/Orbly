@@ -48,4 +48,28 @@ final class TranscriberTests: XCTestCase {
     func testKeinLeerzeichenVerlorenBeiTabsUndUmbruechen() {
         XCTAssertEqual(Transcriber.joinSegments(" Eins\t\n Zwei"), "Eins Zwei")
     }
+
+    // MARK: - cleanup: whisper-Platzhalter bei Stille
+
+    /// Der frühere Ausdruck verlangte, dass der GESAMTE Text eine Klammergruppe
+    /// ist. Geht die Stille über mehr als eine Segmentgrenze (ca. 30 s), liefert
+    /// whisper mehrere, und die landeten wörtlich im Dokument.
+    func testMehrfachesBlankAudioWirdEntfernt() {
+        XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n [BLANK_AUDIO]"), "")
+        XCTAssertEqual(Transcriber.cleanup(" (Musik)\n (Musik)"), "")
+    }
+
+    func testBlankAudioVorEchtemTextWirdEntfernt() {
+        XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n Hallo Welt"), "Hallo Welt")
+        XCTAssertEqual(Transcriber.cleanup(" Hallo Welt\n [BLANK_AUDIO]"), "Hallo Welt")
+    }
+
+    func testEinzelnerPlatzhalterWieBisher() {
+        XCTAssertEqual(Transcriber.cleanup("[BLANK_AUDIO]"), "")
+        XCTAssertEqual(Transcriber.cleanup(" (Musik)"), "")
+    }
+
+    func testEchterTextBleibtUnveraendert() {
+        XCTAssertEqual(Transcriber.cleanup(" Das ist ein Satz."), "Das ist ein Satz.")
+    }
 }

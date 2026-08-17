@@ -77,6 +77,41 @@ final class L10nTests: XCTestCase {
         }
     }
 
+    /// Dieselbe Regel für den restlichen Quelltext, nicht nur für L10n.swift.
+    ///
+    /// Vorher prüfte nur die Tabelle, und zwei Platzhalter für den RAM-Wert
+    /// (AppDelegate, Dashboard) sind so mit einem Halbgeviertstrich im Menü und
+    /// in der Seitenleiste gelandet.
+    func testKeineGedankenstricheImUebrigenQuelltext() throws {
+        // History.swift liest das alte Verlauf.md-Format, dessen Trennzeichen ein
+        // Halbgeviertstrich IST. Das ist ein Parser, keine neue Ausgabe.
+        let ausnahmen = ["History.swift"]
+        let quellen = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // OrblyTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // Projektwurzel
+            .appendingPathComponent("Sources/Orbly")
+
+        let dateien = try FileManager.default
+            .contentsOfDirectory(at: quellen, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "swift" }
+            .filter { !ausnahmen.contains($0.lastPathComponent) }
+        XCTAssertFalse(dateien.isEmpty, "Quelldateien nicht gefunden unter \(quellen.path)")
+
+        for datei in dateien {
+            let inhalt = try String(contentsOf: datei, encoding: .utf8)
+            for (nr, zeile) in inhalt.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                // Kommentare erklären, sie erscheinen nicht in der Oberfläche.
+                let getrimmt = zeile.trimmingCharacters(in: .whitespaces)
+                guard !getrimmt.hasPrefix("//") else { continue }
+                XCTAssertFalse(
+                    zeile.contains("—") || zeile.contains("–"),
+                    "Gedankenstrich in \(datei.lastPathComponent):\(nr + 1): \(getrimmt)"
+                )
+            }
+        }
+    }
+
     /// Fällt eine Übersetzung auf Englisch zurück, greift der Fallback und der
     /// Nutzer sieht Englisch. Das darf nur bei Eigennamen passieren.
     func testKeineUnuebersetztenSaetze() throws {

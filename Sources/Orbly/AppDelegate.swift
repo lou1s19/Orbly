@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
     )
-    private enum DictationState {
+    private enum DictationState: Equatable {
         case idle
         case recording
         case processing
@@ -35,7 +35,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Spendenhinweis (siehe Donation.swift). Nur zeitweise offen.
     private var donationWindow: NSWindow?
 
-    private var state: DictationState = .idle
+    /// Einziger Ort, an dem der Diktat-Zustand wechselt. `didSet` hängt die
+    /// Tastenüberwachung daran, damit sie garantiert zu jedem Rückweg nach
+    /// `.idle` passt - es gibt sieben davon, einer wäre sonst irgendwann
+    /// vergessen worden.
+    private var state: DictationState = .idle {
+        didSet {
+            guard state != oldValue else { return }
+            fnMonitor.setKeyMonitoringEnabled(state != .idle)
+        }
+    }
     private var fnPressStarted: Date?
     private var toggleSession = false
     /// App, in der das Diktat gestartet wurde - nur dort wird eingefügt.
@@ -96,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             forName: AppSettings.changedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             self?.reconcileIfTranscriptionSettingsChanged()
+            self?.pruneHistoryOnSettingsChange()
             self?.applyLanguageIfChanged()
             self?.updateStatus()
         }
@@ -125,6 +135,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Nur bei wirklich relevanten Änderungen den Server anfassen. Vorher startete
     /// JEDE Einstellungsänderung (auch Overlay-Stil oder Position) einen per
     /// Idle-Abschaltung schlafend gelegten Server samt 650 MB Modell neu.
+    /// Der Verlauf altert nach drei Tagen aus. Das lief bisher nur beim Start
+    /// und beim Anhängen eines Diktats. Wer das Mitschreiben ausschaltet, hätte
+    /// seine alten Klartext-Diktate in einer wochenlang laufenden App also
+    /// unbegrenzt behalten.
+    private func pruneHistoryOnSettingsChange() {
+        guard !AppSettings.shared.historyEnabled else { return }
+        History.pruneOldEntries()
+    }
+
     private func reconcileIfTranscriptionSettingsChanged() {
         let current = AppSettings.shared.transcriptionSettingsFingerprint
         guard current != lastServerSettings else { return }
@@ -239,9 +258,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard notification.object as? NSWindow === onboardingWindow else { return }
+        let closing = notification.object as? NSWindow
+        if closing === donationWindow {
+            donationWindow = nil
+            return
+        }
+        guard closing === onboardingWindow else { return }
         onboarding.captureActive = false
         AppSettings.shared.onboardingCompleted = true
+        // Fenster wirklich loslassen. Sonst überlebt der ganze SwiftUI-Baum der
+        // Tour die Sitzung, samt laufender Hintergrund-Animation.
+        onboardingWindow = nil
     }
 
     // MARK: - Spendenhinweis
@@ -270,6 +297,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.isReleasedWhenClosed = false
         // Wie die Tour: immer dunkel, damit die Ampel-Buttons passen.
         window.appearance = NSAppearance(named: .darkAqua)
+        // Ohne Delegate merkt niemand, wenn der rote Ampel-Knopf das Fenster
+        // schließt: Die Referenz blieb stehen, der SwiftUI-Baum lebte weiter und
+        // seine Hintergrund-Animation lief den Rest der Sitzung mit.
+        window.delegate = self
         window.center()
         donationWindow = window
         window.makeKeyAndOrderFront(nil)
@@ -520,6 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // JETZT festgehalten: Wird die Tour während der Transkription geschlossen,
         // würde das Testdiktat sonst als echtes Diktat eingefügt und gespeichert.
         let isOnboardingCapture = onboarding.captureActive
+        let wasTruncated = recorder.lastRecordingWasTruncated
         dictationSession += 1
         let session = dictationSession
         let recordedSeconds = recorder.lastDurationSeconds
@@ -549,13 +581,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             self.runTranscription(
                 wavURL: wavURL, recordedSeconds: recordedSeconds,
-                session: session, isOnboardingCapture: isOnboardingCapture
+                session: session, isOnboardingCapture: isOnboardingCapture,
+                wasTruncated: wasTruncated
             )
         }
     }
 
     private func runTranscription(
-        wavURL: URL, recordedSeconds: Double, session: Int, isOnboardingCapture: Bool
+        wavURL: URL, recordedSeconds: Double, session: Int, isOnboardingCapture: Bool,
+        wasTruncated: Bool
     ) {
         transcriber.transcribe(wavURL: wavURL) { [weak self] result in
             guard let self else { return }
@@ -576,8 +610,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     }
                     return
                 }
-                if text.isEmpty {
-                    self.overlay.hide()
+                // Leeres Ergebnis nicht kommentarlos verschlucken: Wer zu leise
+                // spricht oder ein stummes Mikrofon hat, sah das Overlay sonst
+                // einfach verschwinden und wusste nicht, woran es lag.
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.overlay.showHint(L10n.t("overlay.hint.nothingHeard"), symbol: "waveform.slash")
                     return
                 }
                 Stats.record(text: text, seconds: recordedSeconds)
@@ -609,10 +646,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                             L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
                         )
                     }
+                    // Wurde die Aufnahme an einem Gerätewechsel abgeschnitten,
+                    // fehlt der zweite Teil des Diktats. Das gehört gesagt.
+                    let showTruncatedHint = { [weak self] in
+                        guard let self, session == self.dictationSession else { return }
+                        self.overlay.showHint(
+                            L10n.t("overlay.hint.deviceChanged"), symbol: "mic.badge.xmark"
+                        )
+                    }
                     TextInserter.insert(text, targetApp: self.dictationTargetApp) { outcome in
                         switch outcome {
                         case .inserted:
-                            break
+                            if wasTruncated { showTruncatedHint() }
                         case .appSwitched, .noTextField:
                             showClipboardHint()
                         case .noPermission:
@@ -623,6 +668,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     }
                 } else {
                     TextInserter.copyToClipboard(text)
+                    if wasTruncated {
+                        self.overlay.showHint(
+                            L10n.t("overlay.hint.deviceChanged"), symbol: "mic.badge.xmark"
+                        )
+                    }
                 }
             case .failure(let error):
                 self.report(error: error.localizedDescription)
@@ -665,7 +715,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusMenuItem = NSMenuItem(title: L10n.t("menu.ready"), action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
-        ramMenuItem = NSMenuItem(title: L10n.t("menu.ram", "–"), action: nil, keyEquivalent: "")
+        ramMenuItem = NSMenuItem(title: L10n.t("menu.ram", "..."), action: nil, keyEquivalent: "")
         ramMenuItem.isEnabled = false
         menu.addItem(ramMenuItem)
         menu.addItem(.separator())
