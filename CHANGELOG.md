@@ -8,6 +8,24 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
 
 ---
 
+## 2026-08-17 (2) — Erkennen, dass gar nichts Text annimmt
+
+- **Gemacht:** `TextInserter` prüft vor dem ⌘V, ob im Ziel überhaupt etwas Text annimmt.
+  Wenn nicht (Finder, Schreibtisch, native App ohne Textfeld), wird kein ⌘V gesendet,
+  der Text bleibt in der Zwischenablage und das Overlay zeigt den Hinweis.
+- **Zwei Signale, beide gemessen:** das fokussierte AX-Element (Rolle bzw. beschreibbarer
+  Wert) und der Zustand des Menüpunkts mit dem Kürzel ⌘V. Gemessene Werte: Finder liefert
+  AXGroup und einen ausgegrauten Menüpunkt, Chrome mit Feld liefert AXTextField.
+- **Grenze, bewusst so:** Chromium-Apps (Chrome, Slack, VS Code, Notion) melden auch bei
+  aktivem Textfeld kein fokussiertes Element und lassen „Einfügen" immer aktiv. Dort ist
+  keine Vorhersage möglich, also wird wie bisher eingefügt. Eine falsche Warnung wäre
+  schlimmer als eine fehlende.
+- **Datenschutz:** Gelesen werden nur Rolle, Beschreibbarkeit und Menüzustand, nie der
+  Inhalt eines Feldes.
+- **Geprüft:** `swift build`, `swift test` (61 grün), Verhalten gegen Finder, Chrome,
+  Slack, Spotify, Notion und iTerm2 einzeln nachgemessen. Codex-Gegencheck: Timeout pro
+  Aufruf auf 0,15 s, Zeitbudget für die Menüsuche, Regler und Schalter ausgeschlossen.
+
 ## 2026-08-17 — Hinweis, wenn nichts eingefügt wurde
 
 - **Gemacht:** Konnte der Text nicht eingefügt werden (Bedienungshilfen fehlen oder der
