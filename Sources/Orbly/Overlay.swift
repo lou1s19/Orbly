@@ -9,7 +9,7 @@ enum OverlayPhase: Equatable {
     case ready
     /// Freundlicher Hinweis statt Fehler, z. B. "bitte noch einmal drücken"
     /// nach einem Aufwachdruck (siehe `WakeUpPress`).
-    case hint(String)
+    case hint(String, symbol: String)
 }
 
 enum OverlayStyle: String, CaseIterable {
@@ -151,12 +151,12 @@ final class OverlayController {
 
     /// Kurzer Hinweis in derselben Kapsel-Optik wie der Start-Gruß. Bewusst nicht
     /// als Fehler dargestellt: Es ist nichts kaputt, es fehlt nur ein zweiter Druck.
-    func showHint(_ message: String) {
+    func showHint(_ message: String, symbol: String = "hand.tap.fill") {
         hideTimer?.invalidate()
         hideGeneration += 1
-        state.phase = .hint(message)
+        state.phase = .hint(message, symbol: symbol)
         state.overlayVisible = true
-        resizeAndPosition(CGSize(width: 340, height: 40))
+        resizeAndPosition(CGSize(width: Self.hintWidth(for: message), height: 40))
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
@@ -219,6 +219,15 @@ final class OverlayController {
         })
     }
 
+    /// Die Kapsel wächst mit dem Text, das Panel dahinter muss mitwachsen -
+    /// sonst schneidet `lineLimit(1)` längere Hinweise ab.
+    private static func hintWidth(for message: String) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let text = (message as NSString).size(withAttributes: [.font: font]).width
+        // Symbol, Innenabstände der Kapsel und etwas Luft fürs Panel.
+        return min(max(text + 90, 200), 620)
+    }
+
     private func resizeAndPosition(_ size: CGSize) {
         guard let screen = NSScreen.main else { return }
         let f = screen.visibleFrame
@@ -257,8 +266,8 @@ struct OverlayRootView: View {
         Group {
             if case .error(let msg) = state.phase {
                 ErrorView(message: msg)
-            } else if case .hint(let msg) = state.phase {
-                HintFlashView(message: msg)
+            } else if case .hint(let msg, let symbol) = state.phase {
+                HintFlashView(message: msg, symbol: symbol)
             } else if state.phase == .ready {
                 ReadyFlashView()
             } else {
@@ -337,13 +346,14 @@ struct ReadyFlashView: View {
     }
 }
 
-/// Hinweis nach einem Aufwachdruck: Orbly ist jetzt wach, es fehlt nur der
-/// zweite Druck. Absichtlich dieselbe ruhige Optik wie der Start-Gruß.
+/// Kurzer Hinweis, z. B. nach einem Aufwachdruck oder wenn der Text nicht
+/// eingefügt werden konnte. Absichtlich dieselbe ruhige Optik wie der Start-Gruß.
 struct HintFlashView: View {
     let message: String
+    var symbol: String = "hand.tap.fill"
 
     var body: some View {
-        CapsuleBadge(symbol: "hand.tap.fill", text: message)
+        CapsuleBadge(symbol: symbol, text: message)
     }
 }
 

@@ -20,15 +20,20 @@ enum TextInserter {
     /// Diktat als „Fn als Modifier benutzt" abbrechen.
     private(set) static var isPasting = false
 
-    @discardableResult
-    static func insert(_ text: String, targetApp: NSRunningApplication? = nil) -> Outcome {
+    /// Das Ergebnis steht erst asynchron fest: Der Fokus kann noch kurz vor dem
+    /// ⌘V wechseln. `completion` läuft immer auf dem Hauptthread.
+    static func insert(
+        _ text: String,
+        targetApp: NSRunningApplication? = nil,
+        completion: @escaping (Outcome) -> Void
+    ) {
         let pb = NSPasteboard.general
         let snapshot = snapshotItems(of: pb)
 
         copyToClipboard(text)
         let ourChangeCount = pb.changeCount
 
-        guard AXIsProcessTrusted() else { return .noPermission }
+        guard AXIsProcessTrusted() else { return completion(.noPermission) }
 
         // Zwischen Diktatstart und Serverantwort können viele Sekunden liegen -
         // ist inzwischen eine andere App vorne, kein Cmd+V blind dorthin senden.
@@ -36,7 +41,7 @@ enum TextInserter {
            let front = NSWorkspace.shared.frontmostApplication,
            front.processIdentifier != targetApp.processIdentifier {
             NSLog("Orbly: Einfügen übersprungen - \(front.localizedName ?? "andere App") ist vorne statt \(targetApp.localizedName ?? "Ziel-App")")
-            return .appSwitched
+            return completion(.appSwitched)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -46,6 +51,7 @@ enum TextInserter {
                let front = NSWorkspace.shared.frontmostApplication,
                front.processIdentifier != targetApp.processIdentifier {
                 NSLog("Orbly: Einfügen abgebrochen - Fokuswechsel kurz vor ⌘V")
+                completion(.appSwitched)
                 return
             }
             let source = CGEventSource(stateID: .combinedSessionState)
@@ -59,6 +65,7 @@ enum TextInserter {
             // Die Ereignisse laufen durchs System und kommen erst danach im
             // eigenen Monitor an - das Flag darf also nicht sofort fallen.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isPasting = false }
+            completion(.inserted)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
                 // Nur wiederherstellen, wenn niemand die Zwischenablage
@@ -71,7 +78,6 @@ enum TextInserter {
                 pb.writeObjects(snapshot)
             }
         }
-        return .inserted
     }
 
     /// Legt den Text (mit Concealed-Marker) in die Zwischenablage, ohne einzufügen.

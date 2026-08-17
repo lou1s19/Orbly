@@ -14,3 +14,6 @@ sparkle_private_key*
 # Mitgelieferte Whisper-Engine: Binary, wird von
 # scripts/build-whisper-engine.sh erzeugt
 vendor/
+
+# Repowise-Index (lokal, gehoert nicht ins Repo)
+.repowise/

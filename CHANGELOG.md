@@ -8,6 +8,17 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
 
 ---
 
+## 2026-08-17 — Hinweis, wenn nichts eingefügt wurde
+
+- **Gemacht:** Konnte der Text nicht eingefügt werden (Bedienungshilfen fehlen oder der
+  Nutzer ist inzwischen in einer anderen App), zeigt das Overlay an seiner gewohnten
+  Stelle „Nirgendwo eingefügt, Text liegt in der Zwischenablage" (fünf Sprachen).
+- **Dazu:** `TextInserter.insert` meldet das Ergebnis jetzt per Completion statt per
+  Rückgabewert. Der Fokus kann noch 50 ms vor dem ⌘V wechseln, dieser späte Abbruch war
+  vorher gar nicht sichtbar. Die Hinweis-Kapsel bekommt ein eigenes Symbol und wächst
+  mit der Textbreite, sonst hätte `lineLimit(1)` den längeren Satz abgeschnitten.
+- **Geprüft:** `swift build` und `swift test` (61 grün), signiert installiert.
+
 ## 2026-08-08 — Release v1.1.0
 
 - **Gemacht:** Version 1.1.0 (Build 3) gebaut, mit Developer ID signiert, von Apple
