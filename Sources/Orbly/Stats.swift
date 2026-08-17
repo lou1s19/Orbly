@@ -84,15 +84,7 @@ enum Stats {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
-        // Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
-        // Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
-        // 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
-        if !FileManager.default.fileExists(atPath: url.path) {
-            FileManager.default.createFile(
-                atPath: url.path, contents: nil,
-                attributes: [.posixPermissions: 0o600]
-            )
-        }
+        restrictPermissions()
         // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
         // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
         // Eine volle Platte genau beim Speichern beendete damit die ganze App.
@@ -106,6 +98,24 @@ enum Stats {
             }
         } catch {
             NSLog("Orbly: Statistik konnte nicht gespeichert werden: \(error)")
+        }
+    }
+
+
+    /// Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
+    /// Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
+    /// 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+    ///
+    /// Bewusst auch für BESTEHENDE Dateien: Wer schon diktiert hat, hätte sonst
+    /// als Einziger weiter eine offene Datei, und genau das sind die Nutzer mit
+    /// Inhalt darin.
+    static func restrictPermissions() {
+        let fm = FileManager.default
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: AppSettings.appSupportDir.path)
+        if fm.fileExists(atPath: url.path) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        } else {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
         }
     }
 
@@ -219,6 +229,7 @@ enum Stats {
                 .compactMap { String(data: $0, encoding: .utf8) }
             let output = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
             try? Data(output.utf8).write(to: url)
+            restrictPermissions() // write(to:) legt neu an, mit Standardrechten
             cachedSummary = nil
             NSLog("Orbly: Statistik verdichtet - \(entries.count - result.kept.count) alte Einträge zusammengefasst")
         }
