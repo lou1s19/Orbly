@@ -26,10 +26,33 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<!-- Beliebige Adressen bleiben erlaubt: Ein eigener Transkriptions-Server im
+	     LAN läuft typischerweise ohne TLS-Zertifikat. Die App warnt an dieser
+	     Stelle sichtbar (settings.serverURL.insecure).
+	     Für die beiden Adressen, die Orbly selbst ansteuert, gilt das NICHT:
+	     Dort bleibt TLS Pflicht, sonst könnte eine Umleitung von HTTPS auf HTTP
+	     den Modell-Download und die Update-Suche mitlesbar machen. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>huggingface.co</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>orbly-website.vercel.app</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
 	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Orbly pausiert auf Wunsch laufende Musik (Music/Spotify) während des Diktats und setzt sie danach fort.</string>

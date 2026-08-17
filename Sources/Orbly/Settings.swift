@@ -35,10 +35,13 @@ extension Timer {
 
 /// Sprachauswahl fürs Diktat - dieselbe Liste in Einstellungen und Erst-Tour.
 enum SupportedLanguages {
-    static let dictationOptions: [(value: String, label: String)] = [
-        ("auto", "Auto"), ("de", "DE"), ("en", "EN"),
-        ("es", "ES"), ("fr", "FR"), ("ru", "RU"),
-    ]
+    /// „Auto" ist ein echtes Wort und wird übersetzt, die Sprachkürzel nicht.
+    static var dictationOptions: [(value: String, label: String)] {
+        [
+            ("auto", L10n.t("settings.language.auto")), ("de", "DE"), ("en", "EN"),
+            ("es", "ES"), ("fr", "FR"), ("ru", "RU"),
+        ]
+    }
 }
 
 /// „Beim Anmelden starten" - an zwei Stellen bedienbar (Einstellungen, Tour).
@@ -95,13 +98,21 @@ final class AppSettings {
     private static func migrateLegacyDefaultsIfNeeded(into d: UserDefaults) {
         let markerKey = "migratedFromFlowWhisper"
         guard !d.bool(forKey: markerKey) else { return }
-        d.set(true, forKey: markerKey)
         let legacyPlist = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Preferences/com.louis.flowwhisper.plist")
         guard let legacy = NSDictionary(contentsOf: legacyPlist) as? [String: Any] else { return }
         for (key, value) in legacy where d.object(forKey: key) == nil {
             d.set(value, forKey: key)
         }
+        // Der Ordner heißt jetzt Orbly (siehe appSupportDir). Ein übernommener
+        // modelPath zeigte sonst weiter auf .../FlowWhisper/models/... und der
+        // Nutzer sah „Modell fehlt", obwohl die Datei mitgewandert ist.
+        if let old = d.string(forKey: "modelPath"), old.contains("/FlowWhisper/") {
+            d.set(old.replacingOccurrences(of: "/FlowWhisper/", with: "/Orbly/"), forKey: "modelPath")
+        }
+        // Marker erst NACH getaner Arbeit setzen: Ein einmaliger Lesefehler hätte
+        // die Übernahme sonst für immer verhindert.
+        d.set(true, forKey: markerKey)
         NSLog("Orbly: \(legacy.count) Einstellungen von FlowWhisper übernommen")
     }
 
@@ -110,14 +121,20 @@ final class AppSettings {
         set { d.set(newValue.rawValue, forKey: "mode") }
     }
 
+    /// Eigener Transkriptions-Server. Standard ist LEER: Vorher stand hier die
+    /// Adresse aus dem Setup des Entwicklers (`http://ubuntu-server:8643`).
+    /// „ubuntu-server" ist der Standard-Rechnername jeder Ubuntu-Server-Installation,
+    /// im Servermodus wäre die Aufnahme also im Klartext an irgendeinen Rechner im
+    /// selben Netz gegangen.
     var serverURL: String {
         get {
             let stored = d.string(forKey: "serverURL")
-            // Migration: alter Default zeigte auf Port 8642, der Installer nutzt 8643.
-            if stored == nil || stored == "http://ubuntu-server:8642/inference" {
+            // Bestandsinstallationen: alter Default zeigte auf Port 8642,
+            // der Installer nutzt 8643.
+            if stored == "http://ubuntu-server:8642/inference" {
                 return "http://ubuntu-server:8643/inference"
             }
-            return stored!
+            return stored ?? ""
         }
         set { d.set(newValue, forKey: "serverURL") }
     }
@@ -158,8 +175,12 @@ final class AppSettings {
     }
 
     /// Erkennungssprache fürs Diktat: "auto" oder ISO-Code (de/en/es/fr/ru).
+    ///
+    /// Standard ist "auto", nicht "de". Vorher bekam jede frische Installation
+    /// weltweit Deutsch: Auf einem englischen Mac ging `language=de` an whisper,
+    /// und die Modell-Empfehlung schlug allen das deutsche Fine-Tune vor.
     var language: String {
-        get { d.string(forKey: "language") ?? "de" }
+        get { d.string(forKey: "language") ?? "auto" }
         set { d.set(newValue, forKey: "language") }
     }
 
@@ -245,8 +266,14 @@ final class AppSettings {
         set { d.set(newValue, forKey: "modelPath") }
     }
 
-    static var appSupportDir: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    /// Einmal ermittelt und dann gemerkt. Vorher lief bei JEDEM Zugriff eine
+    /// Ordnerprüfung, und der Getter steckt u. a. in `WhisperModel.localPath`,
+    /// das SwiftUI beim Zeichnen der Modell-Liste laufend aufruft. Dazu kam die
+    /// Migration von mehreren Queues gleichzeitig.
+    private static let resolvedAppSupportDir: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
         let dir = base.appendingPathComponent("Orbly", isDirectory: true)
         // Einmalige Migration von der Zeit vor der Umbenennung (FlowWhisper -> Orbly):
         // Modelle, Verlauf und Statistik einfach mitnehmen statt neu herunterladen.
@@ -256,7 +283,9 @@ final class AppSettings {
             try? fm.moveItem(at: legacy, to: dir)
         }
         return dir
-    }
+    }()
+
+    static var appSupportDir: URL { resolvedAppSupportDir }
 
     static var defaultModelPath: String {
         appSupportDir.appendingPathComponent("models/ggml-large-v3-turbo-q5_0.bin").path
@@ -292,6 +321,11 @@ final class AppSettings {
         for domain in ["com.louis.orbly", "com.louis.flowwhisper"] {
             UserDefaults.standard.removePersistentDomain(forName: domain)
         }
+        Stats.invalidateCache()
+        // Marker neu setzen: Er wurde gerade mitgelöscht, und beim nächsten Start
+        // hätte die Migration die eben gelöschten Einstellungen aus der alten
+        // Plist zurückgeholt. „Alle Daten löschen" muss endgültig sein.
+        UserDefaults.standard.set(true, forKey: "migratedFromFlowWhisper")
         UserDefaults.standard.synchronize()
         return includingModels ? 0 : modelBytes
     }

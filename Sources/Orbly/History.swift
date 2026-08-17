@@ -112,6 +112,15 @@ enum History {
         try? FileManager.default.createDirectory(
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
+        // Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
+        // Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
+        // 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(
+                atPath: url.path, contents: nil,
+                attributes: [.posixPermissions: 0o600]
+            )
+        }
         // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
         // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
         // Eine volle Platte genau beim Speichern beendete damit die ganze App.

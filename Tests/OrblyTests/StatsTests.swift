@@ -161,4 +161,42 @@ final class StatsTests: XCTestCase {
         )
         XCTAssertEqual(Set(fields.keys), ["date", "words", "characters", "seconds"])
     }
+
+    // MARK: - Verdichten ist wiederholbar
+
+    /// Bricht das Verdichten nach dem Schreiben des Archivs ab (Platte voll),
+    /// stehen dieselben Einträge beim nächsten Lauf noch in stats.jsonl. Ohne
+    /// die Marke `compactedUpTo` wurden sie erneut aufaddiert, und die
+    /// Gesamtzahlen blieben dauerhaft zu hoch.
+    func testZweitesVerdichtenZaehltNichtDoppelt() {
+        let jetzt = Date()
+        let alt = DictationStat(
+            date: jetzt.addingTimeInterval(-40 * 86_400),
+            words: 100, characters: 500, seconds: 60
+        )
+        let erste = Stats.compacted([alt], into: StatsArchive(), olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(erste.archive.dictations, 1)
+        XCTAssertEqual(erste.archive.words, 100)
+        XCTAssertTrue(erste.kept.isEmpty)
+
+        // Zweiter Lauf mit denselben Einträgen (Kürzen war fehlgeschlagen).
+        let zweite = Stats.compacted([alt], into: erste.archive, olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(zweite.archive.dictations, 1, "Eintrag wurde doppelt gezählt")
+        XCTAssertEqual(zweite.archive.words, 100, "Wörter wurden doppelt gezählt")
+        XCTAssertTrue(zweite.kept.isEmpty)
+    }
+
+    func testNeuerAlterEintragWirdWeiterhinVerdichtet() {
+        let jetzt = Date()
+        let frueh = DictationStat(
+            date: jetzt.addingTimeInterval(-60 * 86_400), words: 10, characters: 50, seconds: 6
+        )
+        let spaeter = DictationStat(
+            date: jetzt.addingTimeInterval(-40 * 86_400), words: 20, characters: 100, seconds: 12
+        )
+        let erste = Stats.compacted([frueh], into: StatsArchive(), olderThanDays: 30, now: jetzt)
+        let zweite = Stats.compacted([frueh, spaeter], into: erste.archive, olderThanDays: 30, now: jetzt)
+        XCTAssertEqual(zweite.archive.dictations, 2)
+        XCTAssertEqual(zweite.archive.words, 30)
+    }
 }
