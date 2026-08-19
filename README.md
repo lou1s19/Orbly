@@ -4,123 +4,129 @@
 
 # Orbly
 
-**Diktier-App für macOS. Fn halten, sprechen, loslassen. Der Text landet an der Cursor-Position.**
+**Dictation for macOS. Hold Fn, speak, let go. The text lands at your cursor.**
 
-Transkribiert wird auf deinem Mac, nicht in der Cloud. Kein Konto, keine Telemetrie.
+Transcription runs on your Mac, not in the cloud. No account, no telemetry.
 
-<img src="https://img.shields.io/github/license/lou1s19/Orbly" alt="Lizenz" />
+<img src="https://img.shields.io/github/license/lou1s19/Orbly" alt="License" />
 <img src="https://img.shields.io/github/v/release/lou1s19/Orbly" alt="Version" />
-<img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey" alt="Plattform" />
+<img src="https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey" alt="Platform" />
 <img src="https://img.shields.io/badge/Apple%20Silicon%20%2B%20Intel-universal-blue" alt="Universal" />
 <img src="https://img.shields.io/github/stars/lou1s19/Orbly" alt="Stars" />
+
+[Deutsche Version](README.de.md)
+
+<br />
+
+<img src="Resources/screenshot-overlay.png" alt="Hold Fn, speak, and the sentence appears at the cursor" width="620" />
 
 </div>
 
 ## Download
 
-**[Orbly für macOS herunterladen](https://orbly-website.vercel.app)**
+**[Download Orbly for macOS](https://orbly-website.vercel.app)**
 
-Signiert und von Apple notarisiert, öffnet also ohne Sicherheitswarnung. Universal
-Binary für Apple Silicon und Intel, macOS 14 oder neuer. Die App aktualisiert sich
-selbst.
+Signed and notarised by Apple, so it opens without a security warning. Universal
+binary for Apple Silicon and Intel, macOS 14 or newer. The app updates itself.
 
-## Bedienung
+## How to use it
 
-| Aktion | Wirkung |
+| Action | Result |
 |---|---|
-| **Fn halten** | Aufnehmen solange gedrückt, beim Loslassen wird transkribiert |
-| **Fn kurz tippen** | Aufnahme läuft weiter, erneutes Tippen beendet sie |
-| **Esc** | Abbrechen, auch während der Verarbeitung |
+| **Hold Fn** | Records while held. Transcribes when you let go. |
+| **Tap Fn** | Recording keeps running. Tap again to stop. |
+| **Esc** | Cancel, even while it is processing. |
+
+The text is inserted at the cursor position in whatever app you are in. That works
+in Mail, Slack, your editor, a browser field, the terminal, anywhere.
 
 ## Features
 
-- **Läuft offline.** Whisper-Engine liegt in der App, kein Homebrew, keine Installation.
-- **Fünf Sprachen in der Oberfläche** (en, de, es, fr, ru), Spracherkennung automatisch.
-- **Eigener Server möglich.** Whisper auf einem anderen Rechner laufen lassen und den
-  RAM des Macs freihalten. OpenAI-kompatible Endpunkte funktionieren auch.
-- **Overlay mit Live-Pegel**, vier Stile, Position frei wählbar.
-- **Statistik und Verlauf.** Die Statistik speichert nur Zahlen, nie den Text. Der
-  Verlauf ist abschaltbar, löschbar und altert nach drei Tagen von selbst aus.
-- **Menüleiste statt Fenster.** Kein Programm, das im Weg steht.
+- **Works offline.** The Whisper engine ships inside the app. No Homebrew, no install step.
+- **Five interface languages** (en, de, es, fr, ru). Spoken language is detected automatically.
+- **Bring your own server.** Point Orbly at a Whisper server on another machine and keep
+  your Mac's RAM free. OpenAI-compatible endpoints work too.
+- **Overlay with a live level meter**, four styles, position of your choice.
+- **Stats and history.** Stats store numbers only, never your text. History can be
+  turned off, cleared, and expires by itself after three days.
+- **Menu bar, not a window.** Nothing sitting in your way.
 
-## Datenschutz
+<img src="Resources/screenshot-app.png" alt="Orbly stats window" width="760" />
 
-Deine Aufnahmen und Texte verlassen den Mac nicht. Ins Netz geht Orbly an genau drei
-Stellen, und alle drei kannst du im Code nachlesen:
+## Privacy
 
-| Wohin | Wann | Was |
+Your recordings and your text do not leave the Mac. Orbly talks to the network in
+exactly three places, and you can read all three in the source:
+
+| Where | When | What |
 |---|---|---|
-| `127.0.0.1` | bei jedem Diktat | die Aufnahme, an die lokale Engine |
-| `huggingface.co` | einmalig | Download des Sprachmodells |
-| Update-Feed | beim Start | Versionsprüfung, abschaltbar |
+| `127.0.0.1` | every dictation | the recording, to the local engine |
+| `huggingface.co` | once | download of the speech model |
+| update feed | at launch | version check, can be turned off |
 
-Kein Konto, keine Telemetrie, keine Analyse, kein Gerätekennzeichen. Ein Test in
-diesem Repo schlägt fehl, wenn jemand ein Textfeld in die Statistik einbaut, damit
-bleibt das Versprechen überprüfbar statt behauptet.
+No account, no telemetry, no analytics, no device identifier. A test in this repo
+fails if anyone adds a text field to the stats, so the promise stays verifiable
+instead of merely claimed.
 
-## Selbst bauen
-
-```bash
-brew install cmake                    # einmalig, für die Whisper-Engine
-bash scripts/make-signing-cert.sh     # einmalig, stabiles Signier-Zertifikat
-bash scripts/build-app.sh             # baut Engine + App, installiert nach /Applications
-```
-
-Ohne eigenes Zertifikat wird ad-hoc signiert, und dann verwirft macOS die
-Bedienungshilfen-Berechtigung bei **jedem** Neubau. Deshalb der zweite Schritt.
-
-Beim ersten Start Mikrofon und Bedienungshilfen erlauben, und in den
-Systemeinstellungen unter Tastatur „Fn-Taste drücken für" auf **„Keine Aktion"**
-stellen, sonst öffnet macOS seine eigene Diktierfunktion.
+## Build it yourself
 
 ```bash
-swift test    # 48 Tests
+brew install cmake                    # once, for the Whisper engine
+bash scripts/make-signing-cert.sh     # once, for a stable signing certificate
+bash scripts/build-app.sh             # builds engine + app, installs to /Applications
 ```
 
-## Technik
+Without your own certificate the app is signed ad hoc, and macOS then drops the
+Accessibility permission on **every** rebuild. That is what step two is for.
 
-- Swift, SwiftUI und AppKit, gebaut mit SwiftPM, kein Xcode-Projekt nötig
-- [whisper.cpp](https://github.com/ggml-org/whisper.cpp) als Engine, statisch gebaut
-  und mit im App-Bundle
-- Fn-Erkennung über `NSEvent`-Monitore, Aufnahme über `AVAudioEngine` (16 kHz mono)
-- Einfügen über die Zwischenablage und simuliertes ⌘V, danach wird die Zwischenablage
-  wiederhergestellt
-- Metal für das Orb-Overlay, Swift Charts für die Statistik,
-  [Sparkle](https://sparkle-project.org) für Updates
+On first launch, allow microphone and Accessibility access, and in System Settings
+under Keyboard set "Press Fn key to" to **"Do Nothing"**, otherwise macOS opens its
+own dictation instead.
 
-## Unterstützen
+```bash
+swift test    # 48 tests
+```
 
-Orbly ist quelloffen und bleibt kostenlos. Wer möchte, kann die Entwicklung über
-[Ko-fi](https://ko-fi.com/lou1s) unterstützen.
+## How it works
 
-Die App fragt genau einmal danach: nach 20 Diktaten, danach höchstens alle 14 Tage,
-und nach einem Klick auf „Ich habe gespendet" nie wieder. Das ist eine reine
-Vertrauenssache, es gibt keine Prüfung und keinen Server dahinter. Wer den Hinweis
-sofort loswerden will, klickt „Nicht mehr fragen" oder setzt in der App
-`defaults write com.louis.orbly donationPromptDisabled -bool true`. Die Spendenseite
-bleibt in den Einstellungen erreichbar.
+- Swift, SwiftUI and AppKit, built with SwiftPM. No Xcode project needed.
+- [whisper.cpp](https://github.com/ggml-org/whisper.cpp) as the engine, built statically
+  and bundled with the app
+- Fn detection through `NSEvent` monitors, recording through `AVAudioEngine` (16 kHz mono)
+- Insertion via the pasteboard and a simulated ⌘V, after which the pasteboard is restored
+- Metal for the orb overlay, Swift Charts for the stats,
+  [Sparkle](https://sparkle-project.org) for updates
 
-## Beitragen
+## Support
 
-Fehlerberichte und Pull Requests sind willkommen. Vor einem größeren Umbau kurz ein
-Issue aufmachen, damit die Arbeit nicht ins Leere läuft. Details in
-[CONTRIBUTING.md](.github/CONTRIBUTING.md).
+Orbly is open source and stays free. If you want to support the work, there is
+[Ko-fi](https://ko-fi.com/lou1s).
 
-Zwei Dinge prüfen die Tests automatisch: Neue nutzersichtbare Texte müssen in
-`Sources/Orbly/L10n.swift` in **allen fünf** Sprachen stehen, und UI-Texte enthalten
-keine Gedankenstriche.
+The app asks exactly once: after 20 dictations, then at most every 14 days, and never
+again once you click "I donated". That is pure trust, there is no check and no server
+behind it. To get rid of the prompt right away, click "Stop asking" or run
+`defaults write com.louis.orbly donationPromptDisabled -bool true`. The donation page
+stays reachable in the settings.
 
-## Lizenz
+## Contributing
 
-[GNU AGPL v3](LICENSE). Du darfst den Code benutzen, ändern und weitergeben. Wenn du
-eine geänderte Version verbreitest oder als Dienst anbietest, muss dein Quellcode
-ebenfalls unter der AGPL offen liegen.
+Bug reports and pull requests are welcome. For a larger change, open an issue first so
+the work does not go to waste. Details in [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
-Die ganze App liegt in diesem Repo, es gibt keine geschlossenen Zusatzteile und keine
-kostenpflichtige Version. Finanziert wird sie über freiwillige Spenden.
+Two things are checked automatically by the tests: new user-facing strings must exist in
+`Sources/Orbly/L10n.swift` in **all five** languages, and UI strings contain no em dashes.
 
-## Dank
+## License
 
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) von Georgi Gerganov und den
-ggml-Beitragenden, [Whisper](https://github.com/openai/whisper) von OpenAI und
-[Sparkle](https://sparkle-project.org) für die Update-Infrastruktur.
+[GNU AGPL v3](LICENSE). You may use, modify and redistribute the code. If you distribute
+a modified version or offer it as a service, your source has to be open under the AGPL
+as well.
+
+The whole app is in this repo. There are no closed extra parts and no paid version. It
+is funded by voluntary donations.
+
+## Thanks
+
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp) by Georgi Gerganov and the ggml
+contributors, [Whisper](https://github.com/openai/whisper) by OpenAI, and
+[Sparkle](https://sparkle-project.org) for the update infrastructure.
