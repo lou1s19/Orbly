@@ -17,7 +17,7 @@ Ab ~30 Einträgen die ältere Hälfte nach `docs/changelog-archive.md` verschieb
   verlinken sich. Zwei Screenshots liegen in `Resources/`, GitHub Discussions ist an.
 - Offen und nur von Louis machbar: ein Demo-GIF von 8 bis 10 Sekunden (Fn halten,
   sprechen, Text erscheint). Ohne das funktioniert weder r/macapps noch Show HN.
-- Danach: r/macapps zuerst, eine Woche spaeter Show HN. Beides von Hand, automatisierte
+- Danach: r/macapps zuerst, eine Woche später Show HN. Beides von Hand, automatisierte
   Werbeposts werden dort gelöscht und der Account gesperrt.
 - Stand 19.08.2026: 0 Sterne, DMG von v1.1.0 mit 0 Downloads.
 
