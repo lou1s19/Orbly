@@ -19,19 +19,13 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.0</string>
+	<string>1.1.1</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>4</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<!-- Arbitrary addresses stay allowed: a transcription server of your own on
-	     the LAN typically runs without a TLS certificate. The app warns about
-	     that visibly (settings.serverURL.insecure).
-	     For the two addresses Orbly reaches itself this does NOT apply: TLS
-	     stays mandatory there, otherwise a redirect from HTTPS to HTTP could
-	     make the model download and the update check readable. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
