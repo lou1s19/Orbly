@@ -201,6 +201,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         localServer.stop()
     }
 
+    // MARK: - Windows
+
+    /// Centres a window whose content comes from SwiftUI.
+    ///
+    /// `NSWindow(contentViewController:)` adopts the size the hosting view
+    /// reports at that moment, and for SwiftUI that is often still nothing.
+    /// Centring then happens on a window of the wrong height, and once SwiftUI
+    /// has laid out, the window keeps the top left corner it was given. That is
+    /// why every window opened near the top edge of the screen instead of in the
+    /// middle. Laying out first and taking the size from the content keeps the
+    /// numbers in the SwiftUI views, where they belong.
+    private func centerOnScreen(_ window: NSWindow, content: NSView) {
+        content.layoutSubtreeIfNeeded()
+        let fitting = content.fittingSize
+        if fitting.width > 1, fitting.height > 1 {
+            window.setContentSize(fitting)
+        }
+        // `center()` uses the screen with the key window, and a menu bar app
+        // usually has none, so it fell back to the menu bar screen. With two
+        // monitors the window then opened on the one the user is not looking at.
+        guard let screen = OverlayController.activeScreen else {
+            window.center()
+            return
+        }
+        let visible = screen.visibleFrame
+        let size = window.frame.size
+        window.setFrameOrigin(NSPoint(
+            x: visible.midX - size.width / 2,
+            y: visible.midY - size.height / 2
+        ))
+    }
+
     // MARK: - First-run tour
 
     /// Show it on the very first launch. Existing installations are recognized by
@@ -233,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             // The tour is always dark, which suits the traffic light buttons too.
             window.appearance = NSAppearance(named: .darkAqua)
             window.delegate = self
-            window.center()
+            centerOnScreen(window, content: window.contentViewController!.view)
             onboardingWindow = window
         }
         // While the tour is open, a dictation lands in the window instead of the
@@ -333,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // window: the reference stayed, the SwiftUI tree lived on and its
         // background animation ran for the rest of the session.
         window.delegate = self
-        window.center()
+        centerOnScreen(window, content: window.contentViewController!.view)
         donationWindow = window
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -838,7 +870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.isOpaque = false
             window.backgroundColor = .clear
             window.isReleasedWhenClosed = false
-            window.center()
+            centerOnScreen(window, content: hosting.view)
             mainWindow = window
         }
         mainWindow?.makeKeyAndOrderFront(nil)

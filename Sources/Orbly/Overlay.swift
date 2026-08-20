@@ -229,7 +229,7 @@ final class OverlayController {
     /// with the key window", and a nonactivating panel never gets one. Without a
     /// key window macOS falls back to the menu bar screen, so on a second monitor
     /// the overlay appeared on the wrong one.
-    private static var activeScreen: NSScreen? {
+    static var activeScreen: NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { $0.frame.contains(mouse) }
             ?? NSScreen.main
