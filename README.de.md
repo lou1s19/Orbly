@@ -34,6 +34,9 @@ selbst.
 | **Fn kurz tippen** | Aufnahme läuft weiter, erneutes Tippen beendet sie |
 | **Esc** | Abbrechen, auch während der Verarbeitung |
 
+Fn ist die Voreinstellung, nicht fest verdrahtet. Wer mit Fn die Tastatursprache
+umschaltet, wählt in den Einstellungen die rechte Befehls-, Wahl- oder Ctrl-Taste.
+
 ## Features
 
 - **Läuft offline.** Whisper-Engine liegt in der App, kein Homebrew, keine Installation.
@@ -73,10 +76,11 @@ Bedienungshilfen-Berechtigung bei **jedem** Neubau. Deshalb der zweite Schritt.
 
 Beim ersten Start Mikrofon und Bedienungshilfen erlauben, und in den
 Systemeinstellungen unter Tastatur „Fn-Taste drücken für" auf **„Keine Aktion"**
-stellen, sonst öffnet macOS seine eigene Diktierfunktion.
+stellen, sonst öffnet macOS seine eigene Diktierfunktion. Oder Fn bei macOS lassen
+und in Orbly eine andere Taste wählen.
 
 ```bash
-swift test    # 48 Tests
+swift test
 ```
 
 ## Technik
@@ -84,7 +88,7 @@ swift test    # 48 Tests
 - Swift, SwiftUI und AppKit, gebaut mit SwiftPM, kein Xcode-Projekt nötig
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) als Engine, statisch gebaut
   und mit im App-Bundle
-- Fn-Erkennung über `NSEvent`-Monitore, Aufnahme über `AVAudioEngine` (16 kHz mono)
+- Tastenerkennung über `NSEvent`-Monitore, Aufnahme über `AVAudioEngine` (16 kHz mono)
 - Einfügen über die Zwischenablage und simuliertes ⌘V, danach wird die Zwischenablage
   wiederhergestellt
 - Metal für das Orb-Overlay, Swift Charts für die Statistik,

@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var autoInsert = AppSettings.shared.autoInsert
     @State private var mediaMode = AppSettings.shared.mediaDuringDictation.rawValue
     @State private var serverIdleShutdown = AppSettings.shared.serverIdleShutdown
+    @State private var dictationKey = AppSettings.shared.dictationKey.rawValue
     @State private var confirmDeleteAll = false
 
     private var appVersion: String {
@@ -31,6 +32,23 @@ struct SettingsView: View {
             PermissionsCard()
 
             SettingsCard(title: L10n.t("settings.card.dictation"), icon: "text.cursor") {
+                SettingsRow(label: L10n.t("settings.dictationKey")) {
+                    GlassSegmented(
+                        options: DictationKey.pickerOptions,
+                        selection: $dictationKey,
+                        compact: true
+                    )
+                    .onChange(of: dictationKey) { _, newValue in
+                        AppSettings.shared.dictationKey = DictationKey(rawValue: newValue) ?? .default
+                        // The menu title, the tour and the hint below all name the
+                        // key, so they have to be redrawn right away.
+                        AppSettings.shared.notifyChanged()
+                    }
+                }
+                Text(L10n.t("settings.dictationKey.hint"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 Toggle(L10n.t("settings.autoInsert"), isOn: $autoInsert)
                     .onChange(of: autoInsert) { _, enabled in
                         AppSettings.shared.autoInsert = enabled
@@ -125,7 +143,7 @@ struct SettingsView: View {
                             AppSettings.shared.serverIdleShutdown = enabled
                         }
                     if serverIdleShutdown {
-                        Text(L10n.t("settings.serverIdle.hint"))
+                        Text(L10n.t("settings.serverIdle.hint", AppSettings.shared.dictationKey.displayName))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -241,7 +259,7 @@ struct SettingsView: View {
 
             SupportCard()
 
-            Text(.init(L10n.t("settings.hint")))
+            Text(.init(L10n.t("settings.hint", AppSettings.shared.dictationKey.displayName, AppSettings.shared.dictationKey.displayName)))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
@@ -279,6 +297,7 @@ struct SettingsView: View {
         autoInsert = s.autoInsert
         mediaMode = s.mediaDuringDictation.rawValue
         serverIdleShutdown = s.serverIdleShutdown
+        dictationKey = s.dictationKey.rawValue
         refreshLoginItem()
     }
 

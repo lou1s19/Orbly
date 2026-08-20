@@ -443,7 +443,7 @@ struct DashboardView: View {
                     Image(systemName: "chart.xyaxis.line")
                         .font(.system(size: 28))
                         .foregroundStyle(.tertiary)
-                    Text(L10n.t("dashboard.chart.empty"))
+                    Text(L10n.t("dashboard.chart.empty", AppSettings.shared.dictationKey.displayName))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

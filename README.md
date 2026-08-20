@@ -40,6 +40,9 @@ binary for Apple Silicon and Intel, macOS 14 or newer. The app updates itself.
 The text is inserted at the cursor position in whatever app you are in. That works
 in Mail, Slack, your editor, a browser field, the terminal, anywhere.
 
+Fn is the default, not a fixed choice. If you use Fn to switch the input source,
+pick the right Command, Option or Control key in the settings instead.
+
 ## Features
 
 - **Works offline.** The Whisper engine ships inside the app. No Homebrew, no install step.
@@ -81,10 +84,11 @@ Accessibility permission on **every** rebuild. That is what step two is for.
 
 On first launch, allow microphone and Accessibility access, and in System Settings
 under Keyboard set "Press Fn key to" to **"Do Nothing"**, otherwise macOS opens its
-own dictation instead.
+own dictation instead. Or leave Fn to macOS and move dictation to another key in
+Orbly's settings.
 
 ```bash
-swift test    # 48 tests
+swift test
 ```
 
 ## How it works
@@ -92,7 +96,7 @@ swift test    # 48 tests
 - Swift, SwiftUI and AppKit, built with SwiftPM. No Xcode project needed.
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) as the engine, built statically
   and bundled with the app
-- Fn detection through `NSEvent` monitors, recording through `AVAudioEngine` (16 kHz mono)
+- Key detection through `NSEvent` monitors, recording through `AVAudioEngine` (16 kHz mono)
 - Insertion via the pasteboard and a simulated ⌘V, after which the pasteboard is restored
 - Metal for the orb overlay, Swift Charts for the stats,
   [Sparkle](https://sparkle-project.org) for updates
