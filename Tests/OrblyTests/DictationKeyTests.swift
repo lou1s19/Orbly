@@ -85,6 +85,46 @@ final class DictationKeyTests: XCTestCase {
         }
     }
 
+    // MARK: - Telling the sides apart
+
+    /// Holding left and right Command and letting go of the right one leaves
+    /// `.command` set. Without the device bits the release would be missed and
+    /// the recording would run to the ten minute limit.
+    func testReleaseOfTheRightKeyIsSeenWhileTheLeftIsStillHeld() {
+        let leftCommandHeld = NSEvent.ModifierFlags(rawValue: 0x000008 | NSEvent.ModifierFlags.command.rawValue)
+        XCTAssertFalse(DictationKey.rightCommand.isHeld(in: leftCommandHeld))
+
+        let bothHeld = NSEvent.ModifierFlags(rawValue: 0x000018 | NSEvent.ModifierFlags.command.rawValue)
+        XCTAssertTrue(DictationKey.rightCommand.isHeld(in: bothHeld))
+    }
+
+    func testTheSameHoldsForOptionAndControl() {
+        let leftOption = NSEvent.ModifierFlags(rawValue: 0x000020 | NSEvent.ModifierFlags.option.rawValue)
+        XCTAssertFalse(DictationKey.rightOption.isHeld(in: leftOption))
+        let rightOption = NSEvent.ModifierFlags(rawValue: 0x000040 | NSEvent.ModifierFlags.option.rawValue)
+        XCTAssertTrue(DictationKey.rightOption.isHeld(in: rightOption))
+
+        let leftControl = NSEvent.ModifierFlags(rawValue: 0x000001 | NSEvent.ModifierFlags.control.rawValue)
+        XCTAssertFalse(DictationKey.rightControl.isHeld(in: leftControl))
+        let rightControl = NSEvent.ModifierFlags(rawValue: 0x002000 | NSEvent.ModifierFlags.control.rawValue)
+        XCTAssertTrue(DictationKey.rightControl.isHeld(in: rightControl))
+    }
+
+    /// The device bits are not guaranteed to be in every event. Without them the
+    /// side independent flag has to keep working, exactly as before.
+    func testWithoutDeviceBitsTheModifierFlagStillDecides() {
+        XCTAssertTrue(DictationKey.rightCommand.isHeld(in: [.command]))
+        XCTAssertFalse(DictationKey.rightCommand.isHeld(in: [.option]))
+        XCTAssertFalse(DictationKey.rightCommand.isHeld(in: []))
+    }
+
+    /// There is only one Fn key, so there is nothing to tell apart.
+    func testFnHasNoSides() {
+        XCTAssertEqual(DictationKey.fn.deviceMask, 0)
+        XCTAssertTrue(DictationKey.fn.isHeld(in: [.function]))
+        XCTAssertFalse(DictationKey.fn.isHeld(in: [.command]))
+    }
+
     // MARK: - Monitor
 
     func testPressAndReleaseOfTheConfiguredKey() {

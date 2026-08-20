@@ -167,6 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let wanted = AppSettings.shared.dictationKey
         guard keyMonitor.key != wanted else { return }
         keyMonitor.key = wanted
+        // The tour names the key on several pages. Without this it would keep
+        // showing the old one while it is open.
+        onboarding.keyRevision += 1
     }
 
     private func reconcileIfTranscriptionSettingsChanged() {

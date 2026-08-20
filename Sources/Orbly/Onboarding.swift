@@ -25,6 +25,11 @@ final class OnboardingModel: ObservableObject {
     @Published var transcript = ""
     @Published var errorText = ""
 
+    /// Bumped when the dictation key changes in the settings while the tour is
+    /// open. The pages read the key from the settings, and without a published
+    /// change here SwiftUI would leave a stale key cap and stale texts on screen.
+    @Published var keyRevision = 0
+
     /// Set by the AppDelegate while the tour window is open.
     var captureActive = false
 

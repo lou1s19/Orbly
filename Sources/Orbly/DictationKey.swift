@@ -43,6 +43,46 @@ enum DictationKey: String, CaseIterable {
         }
     }
 
+    /// Device dependent bit for exactly this key. macOS reports it next to the
+    /// side independent flag, and it is the only thing that tells the left
+    /// modifier from the right one once both are held.
+    var deviceMask: UInt {
+        switch self {
+        case .fn: return 0                      // there is only one Fn key
+        case .rightCommand: return 0x000010     // NX_DEVICERCMDKEYMASK
+        case .rightOption: return 0x000040      // NX_DEVICERALTKEYMASK
+        case .rightControl: return 0x002000     // NX_DEVICERCTLKEYMASK
+        }
+    }
+
+    /// Both device bits of the modifier, left and right.
+    private var bothSidesMask: UInt {
+        switch self {
+        case .fn: return 0
+        case .rightCommand: return 0x000018     // left 0x08 plus right 0x10
+        case .rightOption: return 0x000060      // left 0x20 plus right 0x40
+        case .rightControl: return 0x002001     // left 0x01 plus right 0x2000
+        }
+    }
+
+    /// Whether THIS key is held, not just any key carrying the same modifier.
+    ///
+    /// Holding left and right Command at once and letting go of the right one
+    /// leaves `.command` set, so the side independent flag would miss the
+    /// release and the recording would run to the ten minute limit. The device
+    /// bits tell the sides apart.
+    ///
+    /// They are not guaranteed to be present in every event, so they are only
+    /// trusted when the event carries a bit for this modifier at all. Otherwise
+    /// this falls back to the side independent flag, which is how it worked
+    /// before and is right whenever only one side is in play.
+    func isHeld(in modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard deviceMask != 0, modifiers.rawValue & bothSidesMask != 0 else {
+            return modifiers.contains(modifier)
+        }
+        return modifiers.rawValue & deviceMask != 0
+    }
+
     /// What the key cap in the tour and the overlay shows.
     var symbol: String {
         switch self {

@@ -86,7 +86,7 @@ final class DictationKeyMonitor {
     /// modifier from the right one. The flag says whether it is down now.
     func apply(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         guard keyCode == key.keyCode else { return }
-        let down = modifiers.contains(key.modifier)
+        let down = key.isHeld(in: modifiers)
         if down && !keyIsDown {
             keyIsDown = true
             onKeyDown?()
