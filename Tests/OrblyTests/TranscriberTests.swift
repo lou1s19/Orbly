@@ -1,13 +1,16 @@
 import XCTest
 @testable import Orbly
 
-/// `joinSegments` ist der Fix für Lücken mitten im Wort („gest alten").
-/// whisper-server trennt Segmente mit \n und stellt jedem WORTANFANG ein
-/// Leerzeichen voran. Fehlt es, wurde mitten im Wort getrennt.
+/// `joinSegments` is the fix for gaps in the middle of a word ("gest alten").
+/// whisper-server separates segments with \n and puts a space in front of every
+/// word start. If it is missing, the split happened inside a word.
+///
+/// The sample texts are German on purpose: that is the recorded output from the
+/// session where the bug appeared, including the umlaut that whisper split.
 final class TranscriberTests: XCTestCase {
 
-    func testEchteServerausgabeMitTrennungImWort() {
-        // Genau diese Antwort kam vom Server, als der Fehler auftrat.
+    func testRealServerOutputWithASplitInsideAWord() {
+        // This is the exact response the server sent when the bug showed up.
         let raw = " Ich finde den Ü\nbergang schön, wenn er lädt."
         XCTAssertEqual(
             Transcriber.joinSegments(raw),
@@ -15,68 +18,68 @@ final class TranscriberTests: XCTestCase {
         )
     }
 
-    func testWortanfangBekommtLeerzeichen() {
+    func testWordStartGetsASpace() {
         XCTAssertEqual(Transcriber.joinSegments(" Hallo\n Welt"), "Hallo Welt")
     }
 
-    func testSatzzeichenWirdDirektAngehaengt() {
+    func testPunctuationIsAppendedDirectly() {
         XCTAssertEqual(Transcriber.joinSegments(" Hallo Welt\n."), "Hallo Welt.")
     }
 
-    func testMehrereSegmente() {
+    func testSeveralSegments() {
         let raw = " Erstens.\n Zweitens.\n Drittens."
         XCTAssertEqual(Transcriber.joinSegments(raw), "Erstens. Zweitens. Drittens.")
     }
 
-    func testLeereSegmenteWerdenUebersprungen() {
+    func testEmptySegmentsAreSkipped() {
         XCTAssertEqual(Transcriber.joinSegments(" Eins\n\n\n Zwei"), "Eins Zwei")
     }
 
-    func testWhitespaceFolgenInnerhalbEinesSegments() {
+    func testWhitespaceRunsInsideASegment() {
         XCTAssertEqual(Transcriber.joinSegments(" Eins    Zwei"), "Eins Zwei")
     }
 
-    func testLeererText() {
+    func testEmptyText() {
         XCTAssertEqual(Transcriber.joinSegments(""), "")
         XCTAssertEqual(Transcriber.joinSegments("\n\n"), "")
     }
 
-    func testEinzelnesSegmentOhneUmbruch() {
+    func testSingleSegmentWithoutALineBreak() {
         XCTAssertEqual(Transcriber.joinSegments(" Nur ein Satz."), "Nur ein Satz.")
     }
 
-    func testKeinLeerzeichenVerlorenBeiTabsUndUmbruechen() {
+    func testNoSpaceLostOnTabsAndLineBreaks() {
         XCTAssertEqual(Transcriber.joinSegments(" Eins\t\n Zwei"), "Eins Zwei")
     }
 
-    // MARK: - cleanup: whisper-Platzhalter bei Stille
+    // MARK: - cleanup: whisper placeholders on silence
 
-    /// Der frühere Ausdruck verlangte, dass der GESAMTE Text eine Klammergruppe
-    /// ist. Geht die Stille über mehr als eine Segmentgrenze (ca. 30 s), liefert
-    /// whisper mehrere, und die landeten wörtlich im Dokument.
-    func testMehrfachesBlankAudioWirdEntfernt() {
+    /// The earlier expression required the WHOLE text to be one bracket group. If
+    /// the silence spans more than one segment boundary (about 30 s), whisper
+    /// returns several, and those ended up verbatim in the document.
+    func testRepeatedBlankAudioIsRemoved() {
         XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n [BLANK_AUDIO]"), "")
         XCTAssertEqual(Transcriber.cleanup(" (Musik)\n (Musik)"), "")
     }
 
-    func testBlankAudioVorEchtemTextWirdEntfernt() {
+    func testBlankAudioBeforeRealTextIsRemoved() {
         XCTAssertEqual(Transcriber.cleanup(" [BLANK_AUDIO]\n Hallo Welt"), "Hallo Welt")
         XCTAssertEqual(Transcriber.cleanup(" Hallo Welt\n [BLANK_AUDIO]"), "Hallo Welt")
     }
 
-    func testEinzelnerPlatzhalterWieBisher() {
+    func testSinglePlaceholderAsBefore() {
         XCTAssertEqual(Transcriber.cleanup("[BLANK_AUDIO]"), "")
         XCTAssertEqual(Transcriber.cleanup(" (Musik)"), "")
     }
 
-    func testEchterTextBleibtUnveraendert() {
+    func testRealTextStaysUnchanged() {
         XCTAssertEqual(Transcriber.cleanup(" Das ist ein Satz."), "Das ist ein Satz.")
     }
 
-    /// Gegenprobe zum Aussortieren: Klammern MITTEN im Diktat sind gewollter
-    /// Text und dürfen nicht verschwinden. (Codex-Fund an der ersten Fassung
-    /// dieser Korrektur, die pauschal jede Klammergruppe entfernt hätte.)
-    func testKlammernImSatzBleibenErhalten() {
+    /// The counter-check for the filtering: brackets IN THE MIDDLE of a dictation
+    /// are text the user wanted and must not disappear. The first version of this
+    /// fix removed every bracket group indiscriminately.
+    func testBracketsInASentenceAreKept() {
         XCTAssertEqual(
             Transcriber.cleanup(" Treffen (verschoben) auf Montag"),
             "Treffen (verschoben) auf Montag"
@@ -84,7 +87,7 @@ final class TranscriberTests: XCTestCase {
         XCTAssertEqual(Transcriber.cleanup(" Nimm array[index] her"), "Nimm array[index] her")
     }
 
-    func testKlammerSegmentZwischenEchtenSegmenten() {
+    func testBracketSegmentBetweenRealSegments() {
         XCTAssertEqual(
             Transcriber.cleanup(" Erster Teil\n [BLANK_AUDIO]\n zweiter Teil"),
             "Erster Teil zweiter Teil"

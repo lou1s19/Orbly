@@ -5,19 +5,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PROJECT_DIR="$(pwd)"
 APP_NAME="Orbly"
-# NICHT im Projektordner bauen: der Desktop ist iCloud-synchronisiert und der
-# File-Provider stempelt dem Bundle laufend FinderInfo-xattrs auf, an denen
-# codesign scheitert ("resource fork ... not allowed").
+# Do NOT build inside the project folder: it may sit in an iCloud-synced
+# location, where the file provider keeps stamping FinderInfo xattrs onto the
+# bundle that codesign then chokes on ("resource fork ... not allowed").
 BUILD_DIR="$HOME/Library/Caches/Orbly/build"
 mkdir -p "$BUILD_DIR"
 APP="$BUILD_DIR/$APP_NAME.app"
 
-# Universal bauen (Apple Silicon + Intel). Bei zwei Architekturen legt SwiftPM
-# die Produkte nach .build/apple/Products/Release statt .build/release.
+# Build universal (Apple Silicon + Intel). With two architectures SwiftPM puts
+# the products into .build/apple/Products/Release instead of .build/release.
 echo "==> swift build -c release (universal: arm64 + x86_64)"
 swift build -c release --arch arm64 --arch x86_64
 PRODUCTS=".build/apple/Products/Release"
-[ -f "$PRODUCTS/$APP_NAME" ] || { echo "FEHLER: $PRODUCTS/$APP_NAME fehlt." >&2; exit 1; }
+[ -f "$PRODUCTS/$APP_NAME" ] || { echo "ERROR: $PRODUCTS/$APP_NAME is missing." >&2; exit 1; }
 
 echo "==> Assembling $APP_NAME.app"
 rm -rf "$APP"
@@ -25,12 +25,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$PRODUCTS/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "Resources/Info.plist" "$APP/Contents/Info.plist"
 
-# Sparkle-Framework (Auto-Updates) einbetten + Suchpfad setzen
+# Embed the Sparkle framework (auto updates) and set the search path
 mkdir -p "$APP/Contents/Frameworks"
 cp -R "$PRODUCTS/Sparkle.framework" "$APP/Contents/Frameworks/"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 
-# Logo (Sidebar) + App-Icon aus Resources/logo.png, falls vorhanden
+# Logo (sidebar) and app icon from Resources/logo.png, if present
 if [ -f "Resources/logo.png" ]; then
   cp "Resources/logo.png" "$APP/Contents/Resources/logo.png"
   ICONSET="$BUILD_DIR/AppIcon.iconset"
@@ -44,11 +44,11 @@ if [ -f "Resources/logo.png" ]; then
   rm -rf "$ICONSET"
 fi
 
-# Whisper-Engine mitliefern. Ohne sie bräuchte der Nutzer Homebrew, und damit
-# wäre die App für alle unbenutzbar, die das nicht haben.
+# Ship the Whisper engine. Without it the user would need Homebrew, which makes
+# the app unusable for everyone who does not have it.
 ENGINE="$PROJECT_DIR/vendor/whisper-server"
 if [ ! -f "$ENGINE" ] && command -v cmake >/dev/null 2>&1; then
-  echo "==> Whisper-Engine fehlt, wird gebaut (einmalig, dauert einige Minuten)"
+  echo "==> Whisper engine missing, building it (one time, takes a few minutes)"
   bash "$PROJECT_DIR/scripts/build-whisper-engine.sh"
 fi
 if [ -f "$ENGINE" ]; then
@@ -56,38 +56,38 @@ if [ -f "$ENGINE" ]; then
   cp "$ENGINE" "$APP/Contents/Helpers/whisper-server"
   chmod +x "$APP/Contents/Helpers/whisper-server"
 elif [[ "${ORBLY_SIGN_IDENTITY:-}" == "Developer ID"* ]]; then
-  # Für ein Release ist das ein harter Fehler: Ohne mitgelieferte Engine
-  # bräuchte jeder Nutzer Homebrew, und die App wäre für die meisten unbenutzbar.
-  echo "FEHLER: Die Whisper-Engine fehlt ($ENGINE)." >&2
-  echo "        Ein Release ohne Engine ist für Nutzer ohne Homebrew unbenutzbar." >&2
-  echo "        Erzeugen mit: brew install cmake && bash scripts/build-whisper-engine.sh" >&2
+  # For a release this is a hard error: without the bundled engine every user
+  # would need Homebrew, and the app would be unusable for most of them.
+  echo "ERROR: the Whisper engine is missing ($ENGINE)." >&2
+  echo "       A release without the engine is unusable for anyone without Homebrew." >&2
+  echo "       Build it with: brew install cmake && bash scripts/build-whisper-engine.sh" >&2
   exit 1
 else
-  # Lokaler Entwicklungs-Build: weiterbauen, die App nimmt dann das
-  # Homebrew-Binary. Nur deutlich sagen, dass das nicht auslieferbar ist.
-  echo "WARNUNG: Whisper-Engine wird NICHT mitgeliefert (vendor/whisper-server fehlt)."
-  echo "         Diese App läuft nur auf Rechnern mit 'brew install whisper-cpp'."
-  echo "         Engine bauen: brew install cmake && bash scripts/build-whisper-engine.sh"
+  # Local development build: keep going, the app then falls back to the Homebrew
+  # binary. Just say clearly that this build cannot be shipped.
+  echo "WARNING: the Whisper engine is NOT bundled (vendor/whisper-server missing)."
+  echo "         This app only runs on machines with 'brew install whisper-cpp'."
+  echo "         Build the engine: brew install cmake && bash scripts/build-whisper-engine.sh"
 fi
 
-# Finder-Metadaten (xattrs) entfernen - kopierte Bilder bringen welche mit,
-# und codesign bricht damit ab ("resource fork ... not allowed").
+# Strip Finder metadata (xattrs). Copied images bring some along and codesign
+# aborts on them ("resource fork ... not allowed").
 xattr -cr "$APP"
 
-# Stabile Identität bevorzugen: Ad-hoc-Signierung ("-") erzeugt bei jedem Build
-# einen neuen Code-Hash, worauf macOS die Bedienungshilfen-Berechtigung still
-# verwirft -> Auto-Einfügen geht kaputt. scripts/make-signing-cert.sh einmal
-# ausführen, dann wird hier automatisch stabil signiert.
-# Reihenfolge ist Absicht: Ein vorhandenes "FlowWhisper Dev" gewinnt, damit auf
-# bestehenden Rechnern die Identität NICHT wechselt - ein Wechsel würde die
-# Bedienungshilfen-Berechtigung verwerfen und das Auto-Einfügen zerstören
-# (Stolperfalle 1). Nur frische Setups ohne Alt-Zertifikat nehmen "Orbly Dev",
-# das make-signing-cert.sh heute anlegt.
-# Achtung beim Ändern: Diese Funktion darf NICHT unter `set -e` fehlschlagen.
-# `head -1` erzeugte früher SIGPIPE (Exit 141) und ein leeres grep Exit 1 - in
-# beiden Fällen brach das Skript bei der Zuweisung unten ohne jede Ausgabe ab
-# (genau das passierte beim ersten echten Release-Versuch). Darum `awk NR==1`
-# statt `head` und `|| true` an jeder Zuweisung.
+# Prefer a stable identity: ad-hoc signing ("-") produces a new code hash on
+# every build, upon which macOS silently drops the accessibility permission and
+# auto-insertion breaks. Run scripts/make-signing-cert.sh once and signing here
+# becomes stable automatically.
+# The order is deliberate: an existing "FlowWhisper Dev" wins so that the
+# identity does NOT change on existing machines. A change would drop the
+# accessibility permission and destroy auto-insertion (pitfall 1). Only fresh
+# setups without the legacy certificate get "Orbly Dev", which is what
+# make-signing-cert.sh creates today.
+# Careful when changing this: the lookup must NOT fail under `set -e`.
+# `head -1` used to produce SIGPIPE (exit 141) and an empty grep exit 1. In both
+# cases the script aborted at the assignment below without any output (which is
+# exactly what happened on the first real release attempt). Hence `awk NR==1`
+# instead of `head`, and `|| true` on every assignment.
 find_identity() {
   security find-identity -v -p codesigning 2>/dev/null \
     | grep -F "\"$1\"" | awk 'NR==1{print $2}' || true
@@ -100,15 +100,15 @@ if [ -n "${ORBLY_SIGN_IDENTITY:-}" ]; then
   IDENTITY="$ORBLY_SIGN_IDENTITY"
   IDENTITY_HASH="$(find_identity "$IDENTITY" || true)"
   if [ -z "$IDENTITY_HASH" ]; then
-    echo "FEHLER: Signier-Identität '$IDENTITY' liegt nicht im Schlüsselbund." >&2
-    echo "        Vorhanden sind:" >&2
+    echo "ERROR: signing identity '$IDENTITY' is not in the keychain." >&2
+    echo "       Available:" >&2
     security find-identity -v -p codesigning >&2 || true
     exit 1
   fi
-  # Zwei Zertifikate mit demselben Namen: make-dmg.sh signiert über den Namen
-  # und würde mit "ambiguous" abbrechen, nachdem die App schon signiert ist.
+  # Two certificates with the same name: make-dmg.sh signs by name and would
+  # abort with "ambiguous" after the app has already been signed.
   if [ "$(count_identities "$IDENTITY")" -gt 1 ]; then
-    echo "FEHLER: '$IDENTITY' ist mehrfach im Schlüsselbund - das alte Zertifikat entfernen." >&2
+    echo "ERROR: '$IDENTITY' exists more than once in the keychain, remove the old certificate." >&2
     exit 1
   fi
 else
@@ -123,10 +123,10 @@ fi
 if [ -n "$IDENTITY_HASH" ]; then
   case "$IDENTITY" in
   "Developer ID"*)
-    # Distribution: Hardened Runtime + Timestamp (Pflicht für Notarisierung).
-    # Sparkle-Bestandteile einzeln von innen nach außen signieren (--deep ist
-    # dafür ungeeignet und würde die App-Entitlements auf die XPCs vererben).
-    echo "==> Codesign Developer ID ($IDENTITY, Hardened Runtime)"
+    # Distribution: hardened runtime + timestamp (required for notarization).
+    # Sign the Sparkle parts individually from the inside out (--deep is unfit
+    # for this and would inherit the app entitlements onto the XPCs).
+    echo "==> Codesign Developer ID ($IDENTITY, hardened runtime)"
     ENTITLEMENTS="$PROJECT_DIR/Resources/Orbly.entitlements"
     SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
     if [ -d "$SPARKLE" ]; then
@@ -137,24 +137,24 @@ if [ -n "$IDENTITY_HASH" ]; then
         "$SPARKLE/Versions/B/Autoupdate" \
         "$SPARKLE/Versions/B/Updater.app"; do
         if [ -e "$NESTED" ]; then
-          # Sparkles XPCs bringen eigene Entitlements mit (Sandbox/Netzwerk) -
-          # ohne --preserve-metadata würden sie beim Neusignieren wegfallen.
+          # Sparkle's XPCs carry their own entitlements (sandbox/network).
+          # Without --preserve-metadata they would be dropped when re-signing.
           codesign --force --options runtime --timestamp \
             --preserve-metadata=entitlements --sign "$IDENTITY_HASH" "$NESTED"
           SIGNED_NESTED=$((SIGNED_NESTED + 1))
         fi
       done
-      # Ändert Sparkle sein Bundle-Layout (die Pfade oben sind fest verdrahtet),
-      # bliebe sonst still unsigniert, was die Notarisierung ohne klare Ursache
-      # ablehnt.
+      # If Sparkle changes its bundle layout (the paths above are hardwired),
+      # things would stay silently unsigned, which notarization then rejects
+      # without naming a clear cause.
       if [ "$SIGNED_NESTED" -eq 0 ]; then
-        echo "FEHLER: keine Sparkle-Bestandteile gefunden - Layout geändert?" >&2
+        echo "ERROR: no Sparkle components found, did the layout change?" >&2
         exit 1
       fi
       codesign --force --options runtime --timestamp --sign "$IDENTITY_HASH" "$SPARKLE"
     fi
-    # Mitgelieferte Engine ebenfalls einzeln signieren (von innen nach außen).
-    # Ohne Hardened Runtime lehnt die Notarisierung das ganze Bundle ab.
+    # Sign the bundled engine separately too (inside out). Without the hardened
+    # runtime notarization rejects the whole bundle.
     if [ -f "$APP/Contents/Helpers/whisper-server" ]; then
       codesign --force --options runtime --timestamp \
         --sign "$IDENTITY_HASH" "$APP/Contents/Helpers/whisper-server"
@@ -168,27 +168,27 @@ if [ -n "$IDENTITY_HASH" ]; then
     ;;
   esac
 else
-  echo "==> Codesign (ad-hoc) - WARNUNG: Bedienungshilfen-Rechte gehen bei jedem Build verloren."
-  echo "    Fix: einmalig 'bash scripts/make-signing-cert.sh' ausführen."
+  echo "==> Codesign (ad-hoc) - WARNING: accessibility permission is lost on every build."
+  echo "    Fix: run 'bash scripts/make-signing-cert.sh' once."
   codesign --force --deep --sign - "$APP"
 fi
 
-# Model in den App-Support-Ordner kopieren (einmalig)
+# Copy the model into the Application Support folder (one time)
 MODEL_SRC="$PROJECT_DIR/models/ggml-large-v3-turbo-q5_0.bin"
 MODEL_DST="$HOME/Library/Application Support/Orbly/models/ggml-large-v3-turbo-q5_0.bin"
 if [ -f "$MODEL_SRC" ] && [ ! -f "$MODEL_DST" ]; then
-  echo "==> Kopiere Whisper-Modell nach Application Support"
+  echo "==> Copying the Whisper model into Application Support"
   mkdir -p "$(dirname "$MODEL_DST")"
   cp "$MODEL_SRC" "$MODEL_DST"
 fi
 
-# Installieren. Mit ORBLY_NO_INSTALL=1 nur bauen und signieren: Ein
-# Release-Build signiert mit der Developer ID, und die installierte App würde
-# damit ihre Identität wechseln. macOS verwirft dann die
-# Bedienungshilfen-Berechtigung, und das Auto-Einfügen ist bis zum erneuten
-# Erteilen kaputt (Stolperfalle 1). Für Prüfläufe also nicht installieren.
+# Install. With ORBLY_NO_INSTALL=1 only build and sign: a release build is
+# signed with the Developer ID, and the installed app would change its identity
+# through it. macOS then drops the accessibility permission and auto-insertion
+# is broken until it is granted again (pitfall 1). So do not install for
+# verification runs.
 if [ "${ORBLY_NO_INSTALL:-0}" = "1" ]; then
-  echo "==> Nicht installiert (ORBLY_NO_INSTALL=1). App liegt in: $APP"
+  echo "==> Not installed (ORBLY_NO_INSTALL=1). The app is at: $APP"
   exit 0
 fi
 
@@ -203,9 +203,9 @@ else
   cp -R "$APP" "$DEST"
 fi
 
-# Belegen, dass wirklich alles universal ist. Eine einzige arm64-only-Datei im
-# Bundle, und die App startet auf einem Intel-Mac gar nicht.
-echo "==> Architekturen im Bundle"
+# Prove that everything really is universal. A single arm64-only file in the
+# bundle and the app will not even launch on an Intel Mac.
+echo "==> Architectures in the bundle"
 for F in "$DEST/Contents/MacOS/$APP_NAME" \
          "$DEST/Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle" \
          "$DEST/Contents/Helpers/whisper-server"; do
@@ -214,10 +214,10 @@ for F in "$DEST/Contents/MacOS/$APP_NAME" \
     printf "    %-16s %s\n" "$(basename "$F")" "$ARCHS"
     case "$ARCHS" in
       *x86_64*arm64*|*arm64*x86_64*) ;;
-      *) echo "    FEHLER: $(basename "$F") ist nicht universal." >&2; exit 1 ;;
+      *) echo "    ERROR: $(basename "$F") is not universal." >&2; exit 1 ;;
     esac
   fi
 done
 
-echo "==> Installiert: $DEST"
-echo "Fertig. Starten mit: open \"$DEST\""
+echo "==> Installed: $DEST"
+echo "Done. Launch it with: open \"$DEST\""

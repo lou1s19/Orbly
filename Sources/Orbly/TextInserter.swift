@@ -5,26 +5,26 @@ import AppKit
 enum TextInserter {
     enum Outcome {
         case inserted
-        /// Bedienungshilfen-Berechtigung fehlt - Text bleibt in der Zwischenablage.
+        /// Accessibility permission is missing, the text stays in the clipboard.
         case noPermission
-        /// Der Nutzer ist inzwischen in einer anderen App - Text bleibt in der Zwischenablage.
+        /// The user is in another app by now, the text stays in the clipboard.
         case appSwitched
-        /// Im Ziel nimmt gerade nichts Text an, etwa im Finder oder auf dem
-        /// Schreibtisch - Text bleibt in der Zwischenablage.
+        /// Nothing in the target accepts text right now, for example in the Finder or
+        /// on the desktop. The text stays in the clipboard.
         case noTextField
     }
 
-    /// Konvention von Passwort-Managern: Clipboard-Manager zeichnen Einträge
-    /// mit diesem Marker nicht auf - Diktate landen so nicht in deren Historie.
+    /// Convention of password managers: clipboard managers do not record entries
+    /// carrying this marker, so dictations stay out of their history.
     private static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
-    /// True, während die App ihr eigenes ⌘V sendet. Der globale Tasten-Monitor
-    /// sieht dieses Ereignis ebenfalls und würde ein gerade gestartetes neues
-    /// Diktat als „Fn als Modifier benutzt" abbrechen.
+    /// True while the app sends its own ⌘V. The global key monitor sees that event
+    /// too and would cancel a dictation that just started, reading it as "Fn used
+    /// as a modifier".
     private(set) static var isPasting = false
 
-    /// Das Ergebnis steht erst asynchron fest: Der Fokus kann noch kurz vor dem
-    /// ⌘V wechseln. `completion` läuft immer auf dem Hauptthread.
+    /// The result is only known asynchronously: the focus can still change shortly
+    /// before the ⌘V. `completion` always runs on the main thread.
     static func insert(
         _ text: String,
         targetApp: NSRunningApplication? = nil,
@@ -38,31 +38,31 @@ enum TextInserter {
 
         guard AXIsProcessTrusted() else { return completion(.noPermission) }
 
-        // Zwischen Diktatstart und Serverantwort können viele Sekunden liegen -
-        // ist inzwischen eine andere App vorne, kein Cmd+V blind dorthin senden.
+        // Many seconds can pass between the start of a dictation and the server
+        // response. If another app is in front by then, do not blindly send Cmd+V.
         if let targetApp,
            let front = NSWorkspace.shared.frontmostApplication,
            front.processIdentifier != targetApp.processIdentifier {
-            NSLog("Orbly: Einfügen übersprungen - \(front.localizedName ?? "andere App") ist vorne statt \(targetApp.localizedName ?? "Ziel-App")")
+            NSLog("Orbly: insertion skipped, \(front.localizedName ?? "another app") is in front instead of \(targetApp.localizedName ?? "the target app")")
             return completion(.appSwitched)
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            // Fokus kann sich in den 50 ms noch ändern - direkt vorm Senden nochmal prüfen.
-            // Der Text bleibt dann in der Zwischenablage (⌘V).
+            // The focus can still change during those 50 ms, so check again right
+            // before sending. The text then stays in the clipboard (⌘V).
             if let targetApp,
                let front = NSWorkspace.shared.frontmostApplication,
                front.processIdentifier != targetApp.processIdentifier {
-                NSLog("Orbly: Einfügen abgebrochen - Fokuswechsel kurz vor ⌘V")
+                NSLog("Orbly: insertion cancelled, the focus changed shortly before ⌘V")
                 completion(.appSwitched)
                 return
             }
-            // Ein ⌘V ins Leere sieht aus, als wäre das Diktat verschwunden:
-            // Der Text ist nirgends aufgetaucht und die Zwischenablage wird
-            // 0,7 s später auch noch zurückgesetzt.
+            // A ⌘V into the void looks as if the dictation vanished: the text
+            // showed up nowhere, and 0.7 s later the clipboard is restored on
+            // top of that.
             if let app = targetApp ?? NSWorkspace.shared.frontmostApplication,
                acceptsText(app) == false {
-                NSLog("Orbly: Einfügen übersprungen - in \(app.localizedName ?? "der App") nimmt gerade nichts Text an")
+                NSLog("Orbly: insertion skipped, nothing in \(app.localizedName ?? "the app") accepts text right now")
                 completion(.noTextField)
                 return
             }
@@ -74,25 +74,25 @@ enum TextInserter {
             isPasting = true
             keyDown?.post(tap: .cghidEventTap)
             keyUp?.post(tap: .cghidEventTap)
-            // Die Ereignisse laufen durchs System und kommen erst danach im
-            // eigenen Monitor an - das Flag darf also nicht sofort fallen.
+            // The events travel through the system and only reach our own monitor
+            // afterwards, so the flag must not drop immediately.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isPasting = false }
             completion(.inserted)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                // Nur wiederherstellen, wenn niemand die Zwischenablage
-                // inzwischen selbst geändert hat.
+                // Only restore when nobody changed the clipboard themselves in the
+                // meantime.
                 guard pb.changeCount == ourChangeCount else { return }
                 pb.clearContents()
-                // War die Zwischenablage vorher leer (z. B. frisch angemeldet),
-                // bleibt sie leer - sonst stünde das ganze Diktat dauerhaft drin.
+                // If the clipboard was empty before (freshly logged in, say), it stays
+                // empty. Otherwise the whole dictation would sit in there permanently.
                 guard !snapshot.isEmpty else { return }
                 pb.writeObjects(snapshot)
             }
         }
     }
 
-    /// Legt den Text (mit Concealed-Marker) in die Zwischenablage, ohne einzufügen.
+    /// Puts the text (with the concealed marker) on the clipboard without pasting.
     static func copyToClipboard(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
@@ -102,33 +102,33 @@ enum TextInserter {
         pb.writeObjects([item])
     }
 
-    // MARK: - Nimmt das Ziel überhaupt Text an?
+    // MARK: - Does the target accept text at all?
 
-    /// `false` heißt „hier kommt nichts an", `true` heißt „Textfeld im Fokus",
-    /// `nil` heißt „nicht feststellbar". Chromium-Apps (Chrome, Slack, VS Code)
-    /// melden auch bei aktivem Textfeld kein fokussiertes Element und lassen den
-    /// Menüpunkt „Einfügen" immer aktiv, gemessen am 2026-08-17. Bei ihnen bleibt
-    /// es deshalb bei `nil` und es wird eingefügt wie bisher: Eine falsche Warnung
-    /// wäre schlimmer als eine fehlende.
+    /// `false` means "nothing arrives here", `true` means "a text field has focus",
+    /// `nil` means "cannot tell". Chromium apps (Chrome, Slack, VS Code) report no
+    /// focused element even with an active text field and leave the "Paste" menu
+    /// item enabled at all times, measured on 2026-08-17. For them the answer
+    /// stays `nil` and pasting happens as before: a wrong warning would be worse
+    /// than a missing one.
     private static func acceptsText(_ app: NSRunningApplication) -> Bool? {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
-        // Antwortet die Ziel-App nicht, darf Orbly nicht mit ihr einfrieren.
-        // Der Wert gilt pro Aufruf, deshalb hat die Menüsuche zusätzlich ein
-        // Gesamtbudget: gemessen braucht sie 4 bis 10 ms.
+        // If the target app does not answer, Orbly must not freeze with it. The
+        // value applies per call, so the menu search has an overall budget on top
+        // of it: measured, it needs 4 to 10 ms.
         AXUIElementSetMessagingTimeout(axApp, 0.15)
 
         if let focused = element(of: axApp, attribute: kAXFocusedUIElementAttribute), isTextTarget(focused) {
             return true
         }
-        // Zweites Signal: Der Finder und andere native Apps schalten „Einsetzen"
-        // ab, solange nur Text in der Zwischenablage liegt und nichts ihn annimmt.
+        // Second signal: the Finder and other native apps disable "Paste" while
+        // there is only text in the clipboard and nothing accepts it.
         return pasteMenuItemEnabled(of: axApp)
     }
 
     private static let textRoles = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
 
-    /// Bedienelemente, deren Wert zwar beschreibbar ist, die aber keinen Text
-    /// annehmen (ein Regler nimmt Zahlen, kein Diktat).
+    /// Controls whose value is writable but that do not accept text (a slider
+    /// takes numbers, not a dictation).
     private static let controlRoles = [
         kAXSliderRole, kAXIncrementorRole, kAXCheckBoxRole, kAXRadioButtonRole,
         kAXButtonRole, kAXPopUpButtonRole, kAXMenuItemRole, kAXColorWellRole,
@@ -141,18 +141,18 @@ enum TextInserter {
         let role = roleValue as? String
         if let role, textRoles.contains(role) { return true }
         if let role, controlRoles.contains(role) { return false }
-        // Beschreibbarer Wert: hier kann Text hinein, egal wie die Rolle heißt.
+        // Writable value: text can go in here, whatever the role is called.
         var settable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
         return settable.boolValue
     }
 
-    /// Sucht den Menüpunkt mit dem Kürzel ⌘V (der Titel ist sprachabhängig,
-    /// das Kürzel nicht) und meldet, ob er aktiv ist. Kostet rund 10 ms.
+    /// Looks for the menu item with the ⌘V shortcut (the title depends on the
+    /// language, the shortcut does not) and reports whether it is enabled. Costs about 10 ms.
     private static func pasteMenuItemEnabled(of axApp: AXUIElement) -> Bool? {
         guard let bar = element(of: axApp, attribute: kAXMenuBarAttribute) else { return nil }
-        // Hängt die Ziel-App, läuft jeder einzelne Aufruf in den Timeout. Lieber
-        // ohne Antwort weitermachen als das Einfügen sekundenlang aufhalten.
+        // If the target app hangs, every single call runs into the timeout. Better
+        // to carry on without an answer than to hold up pasting for seconds.
         let deadline = Date().addingTimeInterval(0.25)
         for menu in children(of: bar) {
             for submenu in children(of: menu) {
@@ -161,8 +161,8 @@ enum TextInserter {
                     var key: CFTypeRef?
                     guard AXUIElementCopyAttributeValue(item, kAXMenuItemCmdCharAttribute as CFString, &key) == .success,
                           (key as? String)?.lowercased() == "v" else { continue }
-                    // 0 = nur die Befehlstaste, also das echte Einfügen und
-                    // nicht „Inhalte einfügen" (⌘⌥⇧V) und Ähnliches.
+                    // 0 = the command key only, so the real paste and not
+                    // "Paste Special" (⌘⌥⇧V) and the like.
                     var modifiers: CFTypeRef?
                     AXUIElementCopyAttributeValue(item, kAXMenuItemCmdModifiersAttribute as CFString, &modifiers)
                     guard (modifiers as? Int) == 0 else { continue }
@@ -192,7 +192,7 @@ enum TextInserter {
         return value as? [AXUIElement] ?? []
     }
 
-    /// Kopiert alle Items mit allen Typen (auch Bilder/Rich-Text), nicht nur Plaintext.
+    /// Copies all items with all types (images/rich text too), not just plain text.
     private static func snapshotItems(of pb: NSPasteboard) -> [NSPasteboardItem] {
         (pb.pasteboardItems ?? []).map { item in
             let copy = NSPasteboardItem()

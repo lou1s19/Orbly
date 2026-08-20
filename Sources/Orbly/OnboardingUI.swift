@@ -1,11 +1,11 @@
 import SwiftUI
 
-// MARK: - Gestaltung der Erst-Tour
+// MARK: - Look of the first-run tour
 //
-// Die Tour hat bewusst einen eigenen, immer dunklen Look (unabhängig vom
-// Systemmodus): ruhiger Nachthimmel als Hintergrund, dunkle Karten darauf,
-// große Typografie, ein weißer Kapsel-Knopf als einziger heller Punkt.
-// Der Rest der App bleibt beim hellen/dunklen Glas-Look aus Dashboard.swift.
+// The tour deliberately has its own, always dark look (independent of the
+// system appearance): a calm night sky as the background, dark cards on top,
+// large typography, a white capsule button as the only bright spot.
+// The rest of the app stays with the light/dark glass look from Dashboard.swift.
 
 enum OB {
     static let radius: CGFloat = 18
@@ -14,7 +14,7 @@ enum OB {
     static let text = Color.white.opacity(0.56)
     static let faint = Color.white.opacity(0.3)
 
-    /// Heller Verlaufs-Rand wie bei den Glas-Karten der App, nur dunkler abgestimmt.
+    /// Bright gradient border like the glass cards of the app, tuned darker.
     static let stroke = LinearGradient(
         colors: [Color.white.opacity(0.13), Color.white.opacity(0.04)],
         startPoint: .top, endPoint: .bottom
@@ -22,7 +22,7 @@ enum OB {
 }
 
 extension View {
-    /// Dunkle Karte auf dem Nachthimmel.
+    /// Dark card on the night sky.
     func obCard(padding: CGFloat = 20, radius: CGFloat = OB.radius) -> some View {
         self
             .padding(padding)
@@ -37,21 +37,21 @@ extension View {
     }
 }
 
-// MARK: - Hintergrund
+// MARK: - Background
 
-/// Nachthimmel: dunkler Verlauf mit drei weichen Lichtern, die sehr langsam
-/// wandern. Bewusst gerechnet statt als Bild - skaliert auf jede Fenstergröße
-/// und bleibt ein paar Kilobyte statt ein paar Megabyte.
+/// Night sky: a dark gradient with three soft lights that drift very slowly.
+/// Computed rather than shipped as an image on purpose: it scales to any
+/// window size and stays a few kilobytes instead of a few megabytes.
 struct NightSky: View {
-    /// „Bewegung reduzieren" in den Bedienungshilfen: Hintergrund bleibt stehen.
+    /// "Reduce motion" in the accessibility settings: the background stands still.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            // 15 Bilder/s reichen: die Lichter brauchen 40 bis 70 Sekunden für
-            // eine Runde, schneller nachzuzeichnen wäre reine Energieverschwendung.
+            // 15 frames per second is enough: the lights need 40 to 70 seconds for
+            // one round, redrawing faster would be a pure waste of energy.
             TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: reduceMotion)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 ZStack {
@@ -104,9 +104,9 @@ struct NightSky: View {
     }
 }
 
-// MARK: - Bausteine
+// MARK: - Building blocks
 
-/// Symbol in einer abgerundeten Glas-Kachel (Kopf jeder Seite).
+/// Symbol in a rounded glass tile (the head of every page).
 struct IconTile: View {
     let symbol: String
     var size: CGFloat = 58
@@ -133,7 +133,7 @@ struct IconTile: View {
     }
 }
 
-/// Kopf einer Seite: Kachel, Titel, ein Satz Erklärung - mittig.
+/// Head of a page: tile, title, one sentence of explanation, centered.
 struct PageHeader: View {
     var icon: String?
     let title: String
@@ -161,7 +161,7 @@ struct PageHeader: View {
     }
 }
 
-/// Weiße Kapsel - der einzige helle Knopf der Tour, immer rechts unten.
+/// White capsule, the only bright button of the tour, always bottom right.
 struct PrimaryPillButton: View {
     let title: String
     var systemImage: String? = "arrow.right"
@@ -192,7 +192,7 @@ struct PrimaryPillButton: View {
     }
 }
 
-/// Umrandete Kapsel für Nebenaktionen („Erlauben", „Laden").
+/// Outlined capsule for secondary actions ("Allow", "Download").
 struct GhostPillButton: View {
     let title: String
     var systemImage: String?
@@ -210,7 +210,7 @@ struct GhostPillButton: View {
     }
 }
 
-/// Gleiche Kapsel, aber ohne Klick - zeigt einen erreichten Zustand („Erteilt").
+/// Same capsule but without a click, showing a state reached ("Granted").
 struct GhostPillLabel: View {
     let title: String
     var systemImage: String?
@@ -236,7 +236,7 @@ struct GhostPillLabel: View {
     }
 }
 
-/// Zurück/Überspringen: nur Text, sehr zurückhaltend.
+/// Back/skip: text only, very restrained.
 struct QuietButton: View {
     let title: String
     var systemImage: String?
@@ -263,7 +263,7 @@ struct QuietButton: View {
     }
 }
 
-/// Fortschritt als Punkte, der aktuelle Schritt als breiter Strich.
+/// Progress as dots, the current step as a wider bar.
 struct StepDots: View {
     let count: Int
     let index: Int
@@ -280,7 +280,7 @@ struct StepDots: View {
     }
 }
 
-/// Häkchen im Akzentkreis mit Text (Vorteilsliste).
+/// Check mark in an accent circle with text (list of benefits).
 struct CheckItem: View {
     let text: String
 
@@ -299,7 +299,7 @@ struct CheckItem: View {
     }
 }
 
-/// Karte mit Kachel, Titel und einer Zeile Erklärung - mittig, für Reihen zu dritt.
+/// Card with tile, title and one line of explanation, centered, for rows of three.
 struct FeatureCard: View {
     let icon: String
     let title: String
@@ -319,8 +319,8 @@ struct FeatureCard: View {
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        // maxHeight sorgt zusammen mit fixedSize an der Reihe dafür, dass alle
-        // Karten nebeneinander gleich hoch sind, auch bei unterschiedlich
+        // maxHeight together with fixedSize on the row makes all cards next to
+        // each other equally tall, even with texts of different lengths.
         // langen Texten.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 22)
@@ -329,7 +329,7 @@ struct FeatureCard: View {
     }
 }
 
-/// Zeile in einer Karte: Symbol, Titel, Erklärung, rechts eine Aktion.
+/// Row in a card: symbol, title, explanation, an action on the right.
 struct OBRow<Trailing: View>: View {
     let icon: String
     let title: String
@@ -369,7 +369,7 @@ extension OBRow where Trailing == EmptyView {
     }
 }
 
-/// Tastenkappe („fn", „esc") im Stil einer echten Taste.
+/// Key cap ("fn", "esc") in the style of a real key.
 struct OBKeyCap: View {
     let label: String
     var wide = false
@@ -396,7 +396,7 @@ struct OBKeyCap: View {
     }
 }
 
-/// Dünne Trennlinie innerhalb einer Karte.
+/// Thin separator inside a card.
 struct OBDivider: View {
     var body: some View {
         Rectangle()

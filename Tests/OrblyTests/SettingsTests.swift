@@ -3,91 +3,91 @@ import XCTest
 
 final class SettingsTests: XCTestCase {
 
-    /// Warnhinweis in den Einstellungen: http auf einen anderen Rechner überträgt
-    /// die Aufnahme im Klartext, Loopback nicht.
-    func testLoopbackGiltNichtAlsUnsicher() {
-        for adresse in [
+    /// Warning in the settings: http to another machine sends the recording in
+    /// the clear, loopback does not.
+    func testLoopbackDoesNotCountAsInsecure() {
+        for address in [
             "http://127.0.0.1:8642/inference",
             "http://localhost:8642/inference",
             "http://[::1]:8642/inference",
         ] {
             XCTAssertFalse(
-                AppSettings.isInsecureRemoteEndpoint(adresse),
-                "\(adresse) verlässt den Mac nicht"
+                AppSettings.isInsecureRemoteEndpoint(address),
+                "\(address) never leaves the Mac"
             )
         }
     }
 
-    func testHttpAufFremdenHostIstUnsicher() {
-        for adresse in [
+    func testHttpToAForeignHostIsInsecure() {
+        for address in [
             "http://192.168.1.50:8643/inference",
             "http://ubuntu-server:8643/inference",
-            // Adresse aus dem Dokumentationsbereich (RFC 5737). Steht hier für
-            // einen Server hinter VPN oder Tailscale: auch der ist über http
-            // nicht verschlüsselt, nur weil das Netz privat ist.
+            // Address from the documentation range (RFC 5737). It stands for a
+            // server behind a VPN or Tailscale: that one is not encrypted over
+            // http either, just because the network is private.
             "http://203.0.113.5:8643/inference",
             "http://example.com/inference",
         ] {
             XCTAssertTrue(
-                AppSettings.isInsecureRemoteEndpoint(adresse),
-                "\(adresse) überträgt die Aufnahme im Klartext"
+                AppSettings.isInsecureRemoteEndpoint(address),
+                "\(address) transmits the recording in the clear"
             )
         }
     }
 
-    func testHttpsIstNieUnsicher() {
+    func testHttpsIsNeverInsecure() {
         XCTAssertFalse(AppSettings.isInsecureRemoteEndpoint("https://example.com/inference"))
         XCTAssertFalse(AppSettings.isInsecureRemoteEndpoint("HTTPS://Example.com/inference"))
     }
 
-    func testGrossschreibungUndLeerzeichenAendernNichts() {
+    func testCasingAndWhitespaceChangeNothing() {
         XCTAssertTrue(AppSettings.isInsecureRemoteEndpoint("  HTTP://192.168.1.50/inference  "))
         XCTAssertFalse(AppSettings.isInsecureRemoteEndpoint("  http://LOCALHOST:8642/x  "))
     }
 
-    func testUnvollstaendigeEingabeMeldetKeinenFehlalarm() {
-        // Während des Tippens steht hier ständig Unfertiges - dann keine Warnung.
-        for eingabe in ["", "http://", "kein url", "192.168.1.50"] {
+    func testIncompleteInputRaisesNoFalseAlarm() {
+        // While typing this field holds unfinished input, so no warning then.
+        for input in ["", "http://", "not a url", "192.168.1.50"] {
             XCTAssertFalse(
-                AppSettings.isInsecureRemoteEndpoint(eingabe),
-                "Fehlalarm bei \"\(eingabe)\""
+                AppSettings.isInsecureRemoteEndpoint(input),
+                "false alarm for \"\(input)\""
             )
         }
     }
 
-    // MARK: - Timer im .common-Modus
+    // MARK: - Timers in .common mode
 
-    /// `Timer.scheduledTimer` hängt nur im `.default`-Modus und steht still,
-    /// sobald ein Menü offen ist oder gescrollt wird. Genau dann sollen der
-    /// Fn-Wächter und das Aufnahme-Zeitlimit aber weiterlaufen.
-    /// Der eigentliche Fehler war nicht der Timer selbst, sondern die falsche
-    /// Fabrikmethode an fünf Stellen. Genau das prüft dieser Test: In `Sources`
-    /// darf `Timer.scheduledTimer` nicht mehr vorkommen, sonst steht das
-    /// Sicherheitsnetz wieder still, sobald ein Menü offen ist.
-    func testKeinScheduledTimerMehrImQuelltext() throws {
-        let quellen = URL(fileURLWithPath: #filePath)
+    /// `Timer.scheduledTimer` only hangs in `.default` mode and stands still as
+    /// soon as a menu is open or something is scrolled. That is exactly when the
+    /// Fn watchdog and the recording time limit have to keep running.
+    /// The actual bug was not the timer itself but the wrong factory method in
+    /// five places. That is what this test checks: `Timer.scheduledTimer` must not
+    /// appear in `Sources` any more, otherwise the safety net stands still again
+    /// as soon as a menu is open.
+    func testNoScheduledTimerLeftInTheSource() throws {
+        let sources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Orbly")
-        let dateien = try FileManager.default
-            .contentsOfDirectory(at: quellen, includingPropertiesForKeys: nil)
+        let files = try FileManager.default
+            .contentsOfDirectory(at: sources, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }
-        XCTAssertFalse(dateien.isEmpty, "Quelldateien nicht gefunden unter \(quellen.path)")
+        XCTAssertFalse(files.isEmpty, "no source files found under \(sources.path)")
 
-        for datei in dateien {
-            let inhalt = try String(contentsOf: datei, encoding: .utf8)
-            for (nr, zeile) in inhalt.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-                guard !zeile.trimmingCharacters(in: .whitespaces).hasPrefix("//") else { continue }
+        for file in files {
+            let content = try String(contentsOf: file, encoding: .utf8)
+            for (no, line) in content.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                guard !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") else { continue }
                 XCTAssertFalse(
-                    zeile.contains("Timer.scheduledTimer"),
-                    "\(datei.lastPathComponent):\(nr + 1) nutzt Timer.scheduledTimer statt Timer.scheduledCommon"
+                    line.contains("Timer.scheduledTimer"),
+                    "\(file.lastPathComponent):\(no + 1) uses Timer.scheduledTimer instead of Timer.scheduledCommon"
                 )
             }
         }
     }
 
-    func testScheduledCommonUebernimmtToleranz() {
+    func testScheduledCommonAdoptsTheTolerance() {
         let timer = Timer.scheduledCommon(every: 30, repeats: true, tolerance: 10) { _ in }
         defer { timer.invalidate() }
         XCTAssertEqual(timer.tolerance, 10, accuracy: 0.001)

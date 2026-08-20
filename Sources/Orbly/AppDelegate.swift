@@ -3,7 +3,7 @@ import SwiftUI
 import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
-    /// Sparkle-Auto-Updates (Feed & Signatur-Schlüssel stehen in der Info.plist).
+    /// Sparkle auto updates (the feed and the signing key live in the Info.plist).
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
     )
@@ -24,28 +24,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let mediaController = MediaController()
     private var mainWindow: NSWindow?
     private let mainWindowState = MainWindowState()
-    /// Erst-Tour: eigenes Fenster, fängt währenddessen das Diktat-Ergebnis ab.
+    /// First-run tour: its own window, catches the dictation result while it is open.
     let onboarding = OnboardingModel()
     private var onboardingWindow: NSWindow?
-    /// Kennung des Tour-Fensters, damit der Pfeiltasten-Monitor der Tour nur auf
-    /// Events aus genau diesem Fenster reagiert.
+    /// Tag of the tour window, so the tour's arrow key monitor only reacts to
+    /// events from exactly that window.
     static let onboardingWindowID = "orbly.onboarding"
-    /// Verhindert, dass ein zweiter Klick das Ausblenden neu startet.
+    /// Prevents a second click from restarting the fade-out.
     private var onboardingClosing = false
-    /// Spendenhinweis (siehe Donation.swift). Nur zeitweise offen.
+    /// Donation prompt (see Donation.swift). Only open temporarily.
     private var donationWindow: NSWindow?
 
-    /// Einziger Ort, an dem der Diktat-Zustand wechselt. `didSet` hängt die
-    /// Tastenüberwachung daran, damit sie garantiert zu jedem Rückweg nach
-    /// `.idle` passt - es gibt sieben davon, einer wäre sonst irgendwann
-    /// vergessen worden.
+    /// The only place where the dictation state changes. `didSet` hangs the key
+    /// monitoring off it, so it is guaranteed to match every path back to `.idle`.
+    /// There are seven of them, and one would eventually have been forgotten.
+    ///
     private var state: DictationState = .idle {
         didSet {
             guard state != oldValue else { return }
             let aktiv = state != .idle
-            // Nicht synchron: Der Wechsel nach .idle passiert oft IM Handler des
-            // keyDown-Monitors (Esc bricht ab). Ein NSEvent.removeMonitor auf den
-            // gerade laufenden Block waere undefiniertes Verhalten.
+            // Not synchronous: the change to .idle often happens INSIDE the handler
+            // of the keyDown monitor (Esc aborts). An NSEvent.removeMonitor on the
+            // block that is currently running would be undefined behaviour.
             DispatchQueue.main.async { [weak self] in
                 guard let self, (self.state != .idle) == aktiv else { return }
                 self.fnMonitor.setKeyMonitoringEnabled(aktiv)
@@ -54,19 +54,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
     private var fnPressStarted: Date?
     private var toggleSession = false
-    /// App, in der das Diktat gestartet wurde - nur dort wird eingefügt.
+    /// The app the dictation was started in. Text is only inserted there.
     private var dictationTargetApp: NSRunningApplication?
     private var maxDurationTimer: Timer?
-    /// Zählt Diktate mit. Ein abgebrochenes Diktat lässt seine späte Antwort
-    /// nicht mehr durch (sonst würde Text nach dem Abbruch noch eingefügt).
+    /// Counts dictations. A cancelled dictation no longer lets its late answer
+    /// through (otherwise text would still be inserted after the cancellation).
     private var dictationSession = 0
-    /// Push-to-talk-Wache: Bei aktivem Secure Input (Passwortfeld) bekommt der
-    /// globale Monitor das Loslassen von Fn nicht mehr - ohne diese Prüfung
-    /// liefe die Aufnahme bis zum 10-Minuten-Limit und würde dann eingefügt.
+    /// Push-to-talk watchdog: with secure input active (a password field) the
+    /// global monitor no longer sees Fn being released. Without this check the
+    /// recording would run to the 10 minute limit and then be pasted.
     private var fnWatchdog: Timer?
-    /// Obergrenze für vergessene Toggle-Aufnahmen (RAM wächst ~230 MB/h).
+    /// Upper limit for forgotten toggle recordings (RAM grows by about 230 MB/h).
     private let maxRecordingSeconds: TimeInterval = 600
-    /// System-Dialog für Bedienungshilfen nur einmal pro Sitzung zeigen.
+    /// Show the system dialog for accessibility only once per session.
     private var axPromptShown = false
 
     // MARK: - Lifecycle
@@ -75,29 +75,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         setupStatusItem()
         enableAutomaticUpdateChecksByDefault()
         let showTour = shouldShowOnboarding()
-        // Die Tour fragt die Berechtigungen selbst ab, mit Erklärung daneben -
-        // sonst stehen beim allerersten Start zwei System-Dialoge im Raum,
-        // bevor der Nutzer weiß, worum es überhaupt geht.
+        // The tour asks for the permissions itself, with an explanation next to
+        // them. Otherwise two system dialogs stand in the room on the very first
+        // launch, before the user knows what this is about at all.
         if !showTour { requestPermissions() }
         localServer.reconcile()
         localServer.startIdleWatch()
         overlay.flashLaunched()
-        // Verlauf altert aus: alte Diktate beim Start entfernen (Privatsphäre + Dateigröße).
+        // The history ages out: remove old dictations at startup (privacy + file size).
         History.pruneOldEntries()
-        // Liegengebliebene Aufnahmen früherer Abstürze wegräumen.
+        // Clear away recordings left behind by earlier crashes.
         AudioRecorder.sweepLeftoverRecordings()
-        // Alte Einzeleinträge der Statistik verdichten, damit die Datei nicht
-        // unbegrenzt wächst (Gesamtsummen bleiben exakt).
+        // Compact old individual statistics entries so the file does not grow
+        // without bound (the totals stay exact).
         Stats.compactOldEntries()
 
         recorder.onLevel = { [weak self] level in
             guard let self else { return }
             self.overlay.push(level: level)
             if self.onboarding.captureActive { self.onboarding.push(level: level) }
-            // Solange Ton hereinkommt, ist der Server in Gebrauch. Ohne das hier
-            // zählte nur der Aufnahme-START als Aktivität, und die Idle-Abschaltung
-            // beendete den Server nach 3 min mitten im Sprechen - ein längeres
-            // Diktat war danach komplett verloren.
+            // While audio is coming in, the server is in use. Without this, only the
+            // START of a recording counted as activity, and the idle shutdown ended
+            // the server after 3 minutes in the middle of speaking. A longer
+            // dictation was completely lost after that.
             self.localServer.noteActivity()
         }
 
@@ -120,32 +120,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if showTour {
             showOnboarding()
         } else if Donation.shouldShowNow {
-            // Kurz warten: Beim Start mit der Anmeldung soll nicht sofort ein
-            // Fenster vor dem Schreibtisch stehen.
+            // Wait a moment: when starting at login, a window should not stand in
+            // front of the desktop right away.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 self?.showDonationPrompt()
             }
         }
     }
 
-    /// Automatische Update-Suche ist der Standard. Einmalig explizit setzen,
-    /// solange der Nutzer nichts anderes gewählt hat - damit der Schalter auch
-    /// bei Bestandsinstallationen sicher an steht und nicht nur „per Default".
+    /// Automatic update checks are the default. Set it explicitly once, as long as
+    /// the user has not chosen otherwise, so the switch is reliably on for
+    /// existing installations too and not only "by default".
     private func enableAutomaticUpdateChecksByDefault() {
         guard UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") == nil else { return }
         updaterController.updater.automaticallyChecksForUpdates = true
     }
 
-    /// Zuletzt gesehener Stand der Einstellungen, die den lokalen Server betreffen.
+    /// Last seen state of the settings that concern the local server.
     private var lastServerSettings = AppSettings.shared.transcriptionSettingsFingerprint
 
-    /// Nur bei wirklich relevanten Änderungen den Server anfassen. Vorher startete
-    /// JEDE Einstellungsänderung (auch Overlay-Stil oder Position) einen per
-    /// Idle-Abschaltung schlafend gelegten Server samt 650 MB Modell neu.
-    /// Der Verlauf altert nach drei Tagen aus. Das lief bisher nur beim Start
-    /// und beim Anhängen eines Diktats. Wer das Mitschreiben ausschaltet, hätte
-    /// seine alten Klartext-Diktate in einer wochenlang laufenden App also
-    /// unbegrenzt behalten.
+    /// Only touch the server on changes that really matter. Before this, EVERY
+    /// settings change (overlay style or position included) restarted a server
+    /// that the idle shutdown had put to sleep, model of 650 MB and all.
+    /// The history ages out after three days. That used to run only at startup and
+    /// when appending a dictation. Whoever turns the history off would therefore
+    /// have kept their old plain text dictations indefinitely in an app that runs
+    /// for weeks.
     private func pruneHistoryOnSettingsChange() {
         guard !AppSettings.shared.historyEnabled else { return }
         History.pruneOldEntries()
@@ -158,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         localServer.reconcile()
     }
 
-    /// Baut Menü und Fensterinhalt neu auf, wenn die App-Sprache gewechselt wurde.
+    /// Rebuilds the menu and the window content when the app language was changed.
     private var appliedLanguage = AppSettings.shared.resolvedAppLanguage
 
     private func applyLanguageIfChanged() {
@@ -175,15 +175,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Wird die App mitten im Diktat beendet, pausierte Musik nicht hängen lassen.
+        // If the app is quit mid-dictation, do not leave paused music hanging.
         mediaController.restorePlayersSync()
         localServer.stop()
     }
 
-    // MARK: - Erst-Tour
+    // MARK: - First-run tour
 
-    /// Beim allerersten Start zeigen. Bestandsinstallationen erkennen wir an der
-    /// Statistik-Datei: Wer schon diktiert hat, braucht die Tour nicht mehr.
+    /// Show it on the very first launch. Existing installations are recognized by
+    /// the statistics file: whoever has dictated does not need the tour any more.
     private func shouldShowOnboarding() -> Bool {
         guard !AppSettings.shared.onboardingCompleted else { return false }
         if FileManager.default.fileExists(atPath: Stats.url.path) {
@@ -209,17 +209,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.isOpaque = false
             window.backgroundColor = .clear
             window.isReleasedWhenClosed = false
-            // Die Tour ist immer dunkel - damit passen auch die Ampel-Buttons.
+            // The tour is always dark, which suits the traffic light buttons too.
             window.appearance = NSAppearance(named: .darkAqua)
             window.delegate = self
             window.center()
             onboardingWindow = window
         }
-        // Solange die Tour offen ist, landet ein Diktat im Fenster statt in der
-        // Ziel-App - auch auf den Seiten vor dem Test.
+        // While the tour is open, a dictation lands in the window instead of the
+        // target app, on the pages before the test as well.
         onboarding.captureActive = true
         onboardingClosing = false
-        // Sanft einblenden statt aufpoppen (nur, wenn es nicht schon sichtbar ist).
+        // Fade in gently instead of popping up (only when not already visible).
         if onboardingWindow?.isVisible != true {
             onboardingWindow?.alphaValue = 0
         }
@@ -236,8 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         fadeOutOnboarding()
     }
 
-    /// Ausblenden und erst danach schließen - sowohl über „Fertig"/„Überspringen"
-    /// als auch über den roten Fensterknopf (siehe `windowShouldClose`).
+    /// Fade out and only close afterwards, both through "Done"/"Skip" and through
+    /// the red window button (see `windowShouldClose`).
     private func fadeOutOnboarding() {
         guard let window = onboardingWindow, window.isVisible, !onboardingClosing else { return }
         onboardingClosing = true
@@ -247,48 +247,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, let window = self.onboardingWindow else { return }
-            // Flag bleibt bis nach close() stehen: `close()` fragt den Delegate
-            // zwar nicht (nur `performClose(_:)` tut das), aber falls doch,
-            // lässt windowShouldClose dank des Flags durch statt neu zu faden.
-            window.close() // setzt über windowWillClose auch die Flags
+            // The flag stays set until after close(): `close()` does not ask the
+            // delegate (only `performClose(_:)` does), but if it did,
+            // windowShouldClose lets it through thanks to the flag instead of
+            window.close() // fading again. Also clears the flags through windowWillClose.
             self.onboardingClosing = false
             window.alphaValue = 1
         })
     }
 
-    /// Der rote Knopf schließt nicht sofort, sondern startet dasselbe Ausblenden.
+    /// The red button does not close immediately, it starts the same fade-out.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard sender === onboardingWindow else { return true }
-        guard !onboardingClosing else { return true } // Ausblenden ist durch
+        guard !onboardingClosing else { return true } // the fade-out is running
         fadeOutOnboarding()
-        return false // das eigentliche close() kommt am Ende der Animation
+        return false // the actual close() comes at the end of the animation
     }
 
     func windowWillClose(_ notification: Notification) {
         let closing = notification.object as? NSWindow
         if closing === donationWindow {
-            // Erst nach dem Schliessen loslassen: Das hier ist die letzte starke
-            // Referenz, und AppKit arbeitet nach windowWillClose noch weiter.
+            // Only let go after closing: this is the last strong reference, and
+            // AppKit keeps working after windowWillClose.
             DispatchQueue.main.async { [weak self] in self?.donationWindow = nil }
             return
         }
         guard closing === onboardingWindow else { return }
         onboarding.captureActive = false
         AppSettings.shared.onboardingCompleted = true
-        // Fenster wirklich loslassen. Sonst überlebt der ganze SwiftUI-Baum der
-        // Tour die Sitzung, samt laufender Hintergrund-Animation.
+        // Really let the window go. Otherwise the whole SwiftUI tree of the tour
+        // survives the session, including a running background animation.
         DispatchQueue.main.async { [weak self] in self?.onboardingWindow = nil }
     }
 
-    // MARK: - Spendenhinweis
+    // MARK: - Donation prompt
 
-    /// Zeigt den Spendenhinweis. Der Zeitpunkt wird sofort festgehalten, damit
-    /// die 14-Tage-Pause auch dann läuft, wenn das Fenster über den roten Knopf
-    /// verschwindet oder die App vorher beendet wird.
+    /// Shows the donation prompt. The time is recorded immediately, so the 14 day
+    /// pause also runs when the window is dismissed through the red button or the
+    /// app is quit before that.
     func showDonationPrompt() {
-        // Zwischen Prüfung und Anzeige liegen zwei Sekunden: In der Zeit kann
-        // die Tour geöffnet worden sein, und zwei Fenster übereinander wären nur
-        // im Weg.
+        // Two seconds pass between the check and showing it. The tour may have
+        // been opened in that time, and two windows on top of each other would
+        // only be in the way.
         guard onboardingWindow?.isVisible != true else { return }
         AppSettings.shared.donationPromptLastShown = Date()
         let count = AppSettings.shared.dictationCount
@@ -304,11 +304,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.isOpaque = false
         window.backgroundColor = .clear
         window.isReleasedWhenClosed = false
-        // Wie die Tour: immer dunkel, damit die Ampel-Buttons passen.
+        // Like the tour: always dark, so the traffic light buttons fit.
         window.appearance = NSAppearance(named: .darkAqua)
-        // Ohne Delegate merkt niemand, wenn der rote Ampel-Knopf das Fenster
-        // schließt: Die Referenz blieb stehen, der SwiftUI-Baum lebte weiter und
-        // seine Hintergrund-Animation lief den Rest der Sitzung mit.
+        // Without a delegate nobody notices when the red button closes the
+        // window: the reference stayed, the SwiftUI tree lived on and its
+        // background animation ran for the rest of the session.
         window.delegate = self
         window.center()
         donationWindow = window
@@ -324,13 +324,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     // MARK: - Permissions
 
     private func requestPermissions() {
-        // Bedienungshilfen werden unabhängig vom Auto-Einfügen gebraucht:
-        // ohne sie liefert der globale Fn-Tasten-Monitor keine Events.
+        // Accessibility is needed independently of auto-insertion: without it
+        // the global Fn key monitor delivers no events.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         let trusted = AXIsProcessTrustedWithOptions(options)
         if !trusted {
-            axPromptShown = true // Dialog kam gerade schon - nicht erneut beim Einfügen
-            NSLog("Orbly: Bedienungshilfen-Berechtigung fehlt noch")
+            axPromptShown = true // The dialog was just shown, do not show it again when inserting
+            NSLog("Orbly: accessibility permission is still missing")
         }
         recorder.requestPermission { granted in
             if !granted {
@@ -370,13 +370,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     private func handleOtherKeyDown(_ keyCode: UInt16) {
-        // Esc bricht auch die Verarbeitung ab. Sonst hängt der Nutzer bei einem
-        // nicht antwortenden Server bis zum Timeout fest und Fn tut nichts.
+        // Esc cancels the processing too. Otherwise the user is stuck with a
+        // server that does not answer until the timeout, and Fn does nothing.
         if keyCode == 53, state == .processing {
-            dictationSession += 1 // spätere Antwort verwerfen
-            // Laufende Arbeit wirklich abbrechen, nicht nur das Ergebnis
-            // wegwerfen: Sonst hängt eine Upload-Verbindung mit der kompletten
-            // Aufnahme im Speicher bis zum Timeout.
+            dictationSession += 1 // discard a late answer
+            // Really cancel the work in flight, do not just throw the result
+            // away: otherwise an upload connection holding the complete
+            // recording sits in memory until the timeout.
             transcriber.cancelCurrent()
             localServer.cancelWait()
             state = .idle
@@ -392,8 +392,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             cancelDictation()
             return
         }
-        // Das simulierte ⌘V der App selbst kommt über den globalen Monitor
-        // zurück - es darf das nächste Diktat nicht abbrechen.
+        // The app's own simulated ⌘V comes back through the global monitor.
+        // It must not cancel the next dictation.
         if TextInserter.isPasting { return }
         // Any key while Fn is held down: user is using Fn as a modifier
         // (Fn+arrows etc.) -> this was not a dictation attempt.
@@ -405,9 +405,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     // MARK: - Dictation flow
 
     private func startDictation() {
-        // Fehlt die lokale Engine oder das Modell, würde der Nutzer sonst ein
-        // ganzes Diktat sprechen und erst beim Loslassen erfahren, dass nichts
-        // aufgenommen werden konnte.
+        // Without the local engine or the model the user would otherwise speak a
+        // whole dictation and only learn on release that nothing could be
+        // recorded.
         if AppSettings.shared.mode == .local, let missing = localServer.missingRequirement() {
             report(error: missing)
             return
@@ -418,8 +418,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 self.report(error: L10n.t("overlay.error.noMic"))
                 return
             }
-            // Kam die Freigabe asynchron (erster Start, Berechtigungsdialog),
-            // ist Fn längst losgelassen - dann nicht heimlich weiter aufnehmen.
+            // If the permission arrived asynchronously (first launch, permission
+            // dialog), Fn was released long ago. Do not secretly keep recording.
             guard self.fnMonitor.fnIsDown else { return }
             do {
                 try self.recorder.start()
@@ -430,8 +430,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 if self.onboarding.captureActive { self.onboarding.begin() }
                 self.updateStatus()
                 self.localServer.noteActivity()
-                // Kaltstart nach Idle-Abschaltung: Modell lädt, während der Nutzer
-                // spricht - das Overlay pulsiert derweil sanft als Hinweis.
+                // Cold start after an idle shutdown: the model loads while the user is
+                // speaking, and the overlay pulses gently in the meantime as a hint.
                 let coldStart = AppSettings.shared.mode == .local && !self.localServer.isRunning
                 self.localServer.startIfNeeded()
                 if coldStart { self.overlay.setServerStarting(true) }
@@ -449,18 +449,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    /// Prüft während Push-to-talk den echten Zustand der Fn-Taste. Klickt der
-    /// Nutzer mitten im Diktat in ein Passwortfeld, schaltet macOS Secure Input
-    /// ein und der Monitor sieht das Loslassen nicht mehr. Ohne diese Wache
-    /// liefe die Aufnahme bis zum 10-Minuten-Limit und würde dann irgendwo
-    /// eingefügt.
+    /// Checks the real state of the Fn key during push-to-talk. If the user clicks
+    /// into a password field mid-dictation, macOS turns secure input on and the
+    /// monitor no longer sees the release. Without this watchdog the recording
+    /// would run to the 10 minute limit and then be pasted somewhere.
+    ///
     private func startFnWatchdog() {
         fnWatchdog?.invalidate()
-        // Absichtlich fail-safe: Beendet wird erst, wenn die Wache die gedrückte
-        // Fn-Taste vorher mindestens einmal SELBST gesehen hat. Meldet
-        // `NSEvent.modifierFlags` auf einer Tastatur kein `.function`, feuert sie
-        // nie - dann verhält sich die App wie vorher, statt jedes Diktat nach
-        // 0,4 s abzuwürgen.
+        // Deliberately fail-safe: it only stops once the watchdog has seen the Fn
+        // key held down at least once ITSELF. If `NSEvent.modifierFlags` reports
+        // no `.function` on some keyboard, it never fires, and the app behaves as
+        // before instead of choking off every dictation after 0.4 s.
         var sawFnHeld = false
         fnWatchdog = Timer.scheduledCommon(every: 0.4, repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -470,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 return
             }
             guard sawFnHeld else { return }
-            NSLog("Orbly: Fn-Loslassen nicht empfangen (Secure Input?) - Diktat wird beendet")
+            NSLog("Orbly: Fn release not received (secure input?), ending the dictation")
             self.stopAndTranscribe()
         }
     }
@@ -488,8 +487,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         updateStatus()
     }
 
-    /// Fehler dorthin melden, wo der Nutzer gerade hinschaut: während der Tour
-    /// ins Fenster, sonst ins Overlay.
+    /// Report errors where the user is looking: into the window during the tour,
+    /// into the overlay otherwise.
     private func report(error message: String) {
         if onboarding.captureActive {
             overlay.hide()
@@ -501,15 +500,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func stopAndTranscribe() {
         guard state == .recording else { return }
-        // Ziel-App beim Loslassen von Fn aktualisieren: Der Nutzer darf das
-        // Zielfenster auch erst WÄHREND des Sprechens auswählen. Nil-Fallback:
-        // die beim Start gemerkte App behalten.
+        // Update the target app when Fn is released: the user may pick the target
+        // window WHILE speaking. Nil fallback: keep the app remembered at the start.
+        //
         if let front = NSWorkspace.shared.frontmostApplication {
             dictationTargetApp = front
         }
         maxDurationTimer?.invalidate()
         fnWatchdog?.invalidate()
-        // Musik direkt beim Fn-Loslassen fortsetzen, nicht erst nach der Transkription.
+        // Resume the music right when Fn is released, not after transcription.
         mediaController.restorePlayers()
         toggleSession = false
         let wavURL: URL
@@ -518,32 +517,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             wavURL = url
         case .tooShort:
             state = .idle
-            // Zurücksetzen, sonst pulsiert das Overlay den Rest der Sitzung im
-            // „Server startet"-Zustand: Der Weg über waitUntilReady, der das sonst
-            // erledigt, wird hier nie erreicht.
+            // Reset it, otherwise the overlay pulses in the "server starting" state
+            // for the rest of the session: the path through waitUntilReady, which
+            // normally does this, is never reached here.
             overlay.setServerStarting(false)
             updateStatus()
-            // Aufwachdruck: Die Audio-Hardware lag im Schlaf, das Aufwecken hat den
-            // Druck aufgefressen. Sagen, dass es jetzt geht, statt kommentarlos zu
-            // verschwinden.
+            // Wake-up press: the audio hardware was asleep and waking it up ate the
+            // press. Say that it works now instead of disappearing without a word.
+            //
             let wakeUp = WakeUpPress.shouldHint(
                 recordingWasTooShort: true,
                 audioWarmup: recorder.lastStartWarmupSeconds
             )
             if onboarding.captureActive {
                 overlay.hide()
-                // In der Tour gehört der Hinweis ins Fenster, wo der Nutzer hinschaut.
+                // During the tour the note belongs in the window, where the user is looking.
                 if wakeUp { onboarding.fail(L10n.t("overlay.hint.pressAgain")) } else { onboarding.cancelled() }
             } else if wakeUp {
                 overlay.showHint(L10n.t("overlay.hint.pressAgain"))
             } else {
-                // Fn nur gestreift: still verwerfen wie bisher.
+                // Fn only brushed: discard silently as before.
                 overlay.hide()
             }
             return
         case .failed:
-            // Aufnahme fehlgeschlagen (Gerätewechsel, Platte voll): nicht
-            // stillschweigend verwerfen - der Nutzer hat gerade gesprochen.
+            // Recording failed (device change, disk full): do not discard it
+            // silently, the user has just been speaking.
             state = .idle
             overlay.setServerStarting(false)
             updateStatus()
@@ -556,32 +555,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if onboarding.captureActive { onboarding.processing() }
         updateStatus()
 
-        // Ergebnis eines Testdiktats gehört ins Tour-Fenster. Der Zustand wird
-        // JETZT festgehalten: Wird die Tour während der Transkription geschlossen,
-        // würde das Testdiktat sonst als echtes Diktat eingefügt und gespeichert.
+        // The result of a test dictation belongs in the tour window. The state is
+        // captured NOW: if the tour is closed during transcription, the test
+        // dictation would otherwise be pasted and stored as a real one.
         let isOnboardingCapture = onboarding.captureActive
         let wasTruncated = recorder.lastRecordingWasTruncated
         dictationSession += 1
         let session = dictationSession
         let recordedSeconds = recorder.lastDurationSeconds
-        // Nach einer Idle-Abschaltung lädt der lokale Server evtl. noch das
-        // Modell - erst senden, wenn der Port offen ist (sonst Connection refused).
+        // After an idle shutdown the local server may still be loading the model.
+        // Only send once the port is open (otherwise connection refused).
         localServer.waitUntilReady { [weak self] ready in
             guard let self else { return }
-            // Abgebrochen (Esc) oder längst ein neues Diktat gestartet. Die
-            // Aufnahme muss trotzdem weg, sie ist eine rohe Sprachdatei.
-            // `setServerStarting` gehört NACH diese Prüfung: Ein Nachzügler
-            // hätte sonst das Pulsieren des neuen Diktats abgeschaltet.
+            // Cancelled (Esc) or a new dictation started long ago. The recording
+            // still has to go, it is a raw speech file.
+            // `setServerStarting` belongs AFTER this check: a straggler would
+            // otherwise have switched off the pulsing of the new dictation.
             guard session == self.dictationSession else {
                 try? FileManager.default.removeItem(at: wavURL)
                 return
             }
-            // Immer zurücksetzen, auch bei Misserfolg: Sonst pulsiert das Overlay
-            // den Rest der Sitzung im „Server startet"-Zustand.
+            // Always reset it, on failure too: otherwise the overlay pulses in the
+            // "server starting" state for the rest of the session.
             self.overlay.setServerStarting(false)
             guard ready else {
-                // Die Aufnahme wird sonst erst im Transcriber gelöscht - der hier
-                // nie dran kommt. Rohe Sprachaufnahme darf nicht liegen bleiben.
+                // Otherwise the recording is only deleted in the Transcriber, which is
+                // never reached here. Raw speech must not stay behind.
                 try? FileManager.default.removeItem(at: wavURL)
                 self.state = .idle
                 self.updateStatus()
@@ -602,14 +601,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     ) {
         transcriber.transcribe(wavURL: wavURL) { [weak self] result in
             guard let self else { return }
-            // Der Nutzer hat abgebrochen - Ergebnis verwerfen, nichts einfügen.
+            // The user cancelled: discard the result, insert nothing.
             guard session == self.dictationSession else { return }
             self.state = .idle
             self.updateStatus()
             switch result {
             case .success(let text):
-                // Testdiktat der Tour: Ergebnis nur zeigen. Kein Einfügen, keine
-                // Statistik, kein Verlauf - es ist ein Test, kein echtes Diktat.
+                // Test dictation of the tour: only show the result. No insertion, no
+                // statistics, no history, it is a test and not a real dictation.
                 if isOnboardingCapture {
                     self.overlay.hide()
                     if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -619,20 +618,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     }
                     return
                 }
-                // Leeres Ergebnis nicht kommentarlos verschlucken: Wer zu leise
-                // spricht oder ein stummes Mikrofon hat, sah das Overlay sonst
-                // einfach verschwinden und wusste nicht, woran es lag.
+                // Do not swallow an empty result without a word: whoever speaks too
+                // quietly or has a muted microphone would otherwise just see the
+                // overlay disappear and not know why.
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.overlay.showHint(L10n.t("overlay.hint.nothingHeard"), symbol: "waveform.slash")
                     return
                 }
                 Stats.record(text: text, seconds: recordedSeconds)
-                // Zählt nur für den Spendenhinweis mit (Donation.swift).
+                // Only counts towards the donation prompt (Donation.swift).
                 AppSettings.shared.dictationCount += 1
-                // Offene Fenster nachziehen: Diktiert der Nutzer, während das
-                // Orbly-Fenster vorne ist, feuert kein Fokuswechsel und Verlauf
-                // wie Statistik blieben stehen. Erst melden, wenn der Eintrag
-                // wirklich geschrieben ist.
+                // Bring open windows up to date: if the user dictates while the Orbly
+                // window is in front, no focus change fires and both history and
+                // statistics would stand still. Only announce it once the entry really
+                // is written.
                 let notifyWindows = {
                     NotificationCenter.default.post(
                         name: AppSettings.dictationRecordedNotification, object: nil
@@ -645,18 +644,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
                 self.overlay.hide()
                 if AppSettings.shared.autoInsert {
-                    // Ohne Rückmeldung wirkt das Diktat verloren: Der Text ist
-                    // nirgends aufgetaucht und liegt nur im Verborgenen in der
-                    // Zwischenablage. Läuft aber längst ein neues Diktat, gehört
-                    // die Stelle dessen Aufnahme-Overlay, nicht diesem Nachzügler.
+                    // Without feedback the dictation seems lost: the text showed up
+                    // nowhere and sits only hidden in the clipboard. But if a new
+                    // dictation is already running, that spot belongs to its recording
+                    // overlay, not to this straggler.
                     let showClipboardHint = { [weak self] in
                         guard let self, session == self.dictationSession else { return }
                         self.overlay.showHint(
                             L10n.t("overlay.hint.inClipboard"), symbol: "doc.on.clipboard"
                         )
                     }
-                    // Wurde die Aufnahme an einem Gerätewechsel abgeschnitten,
-                    // fehlt der zweite Teil des Diktats. Das gehört gesagt.
+                    // If the recording was cut short by a device change, the second part
+                    // of the dictation is missing. That has to be said.
                     let showTruncatedHint = { [weak self] in
                         guard let self, session == self.dictationSession else { return }
                         self.overlay.showHint(
@@ -670,7 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                         case .appSwitched, .noTextField:
                             showClipboardHint()
                         case .noPermission:
-                            NSLog("Orbly: Auto-Einfügen blockiert - Bedienungshilfen fehlen")
+                            NSLog("Orbly: auto-insertion blocked, accessibility permission is missing")
                             showClipboardHint()
                             self.promptAccessibilityOnce()
                         }
@@ -689,9 +688,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    /// Zeigt den macOS-Dialog "Orbly möchte diesen Computer steuern",
-    /// wenn Auto-Einfügen an der fehlenden Berechtigung scheitert (z. B. nach
-    /// Neubau/Neusignierung der App). Kein eigenes Popup mehr.
+    /// Shows the macOS dialog "Orbly wants to control this computer" when
+    /// auto-insertion fails on the missing permission (after rebuilding or
+    /// re-signing the app, for example). No popup of our own any more.
     private func promptAccessibilityOnce() {
         guard !axPromptShown else { return }
         axPromptShown = true
@@ -734,7 +733,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusItem.menu = menu
     }
 
-    /// Aktualisiert die RAM-Zeile bei jedem Öffnen des Menüs (App + ggf. lokaler Server).
+    /// Updates the RAM line every time the menu opens (app plus the local server, if any).
     func menuWillOpen(_ menu: NSMenu) {
         guard menu == statusItem.menu else { return }
         let appPid = ProcessInfo.processInfo.processIdentifier
@@ -760,9 +759,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let symbol: String
         switch state {
         case .idle:
-            // Ohne Bedienungshilfen liefert der Fn-Monitor keine Events: Fn tut
-            // gar nichts. „Bereit" wäre dann eine Lüge - das muss man hier sehen,
-            // ohne erst die Einstellungen zu öffnen.
+            // Without accessibility the Fn monitor delivers no events: Fn does
+            // nothing at all. "Ready" would be a lie, and that has to be visible
+            // here without opening the settings first.
             if !AXIsProcessTrusted() {
                 statusMenuItem.title = L10n.t("menu.status.axMissing")
                 symbol = "exclamationmark.triangle"
@@ -777,8 +776,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             statusMenuItem.title = L10n.t("menu.status.processing")
             symbol = "ellipsis.circle"
         }
-        // accessibilityDescription mitgeben: Vorher stand nur beim allerersten
-        // Bild ein Name, jedes updateStatus() ersetzte ihn durch nil.
+        // Pass accessibilityDescription along: before this only the very first
+        // image had a name, and every updateStatus() replaced it with nil.
         statusItem.button?.image = NSImage(
             systemSymbolName: symbol,
             accessibilityDescription: L10n.t("menu.accessibility.status", statusMenuItem.title)
@@ -800,14 +799,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let hosting = NSHostingController(rootView: root)
             let window = NSWindow(contentViewController: hosting)
             window.title = "Orbly"
-            // Sidebar-Layout: Inhalt läuft bis unter die (unsichtbare) Titelleiste,
-            // nur die Ampel-Buttons bleiben sichtbar.
+            // Sidebar layout: the content runs up under the (invisible) title bar,
+            // only the traffic light buttons stay visible.
             window.styleMask = [.titled, .closable, .fullSizeContentView]
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.isMovableByWindowBackground = true
-            // Für den Hinter-Fenster-Blur (Glassmorphism) muss das Fenster
-            // selbst durchsichtig sein - den Inhalt malt die NSVisualEffectView.
+            // For the behind-window blur (the glass look) the window itself has to
+            // be transparent. The content is drawn by the NSVisualEffectView.
             window.isOpaque = false
             window.backgroundColor = .clear
             window.isReleasedWhenClosed = false

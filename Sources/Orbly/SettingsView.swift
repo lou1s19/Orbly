@@ -13,8 +13,8 @@ struct SettingsView: View {
     @State private var overlayPosition = AppSettings.shared.overlayPosition.rawValue
     @State private var launchAtLogin = LoginItem.isOn
     @State private var launchNeedsApproval = LoginItem.needsApproval
-    /// Registrierung hat nicht geklappt - dann hilft nur der Weg über die
-    /// Systemeinstellungen, und das muss dastehen statt still zurückzuspringen.
+    /// Registration did not work. Then only the route through System Settings
+    /// helps, and that has to be said instead of silently jumping back.
     @State private var launchFailed = false
     @State private var historyEnabled = AppSettings.shared.historyEnabled
     @State private var autoInsert = AppSettings.shared.autoInsert
@@ -135,15 +135,15 @@ struct SettingsView: View {
                     TextField(L10n.t("settings.serverURL"), text: $serverURL, prompt: Text("http://192.168.1.50:8643/inference"))
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: serverURL) { _, newValue in
-                            // Getrimmt speichern: Ein mitkopiertes Leerzeichen am
-                            // Ende machte die Adresse ungueltig, und der Fehler
-                            // fiel erst beim naechsten Diktat auf.
+                            // Store it trimmed: a space copied along at the end
+                            // made the address invalid, and the mistake only
+                            // showed up on the next dictation.
                             AppSettings.shared.serverURL = newValue
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
                         }
-                    // Bei http:// auf einen entfernten Host geht die Aufnahme
-                    // unverschlüsselt durchs Netz. Das muss dastehen, sonst
-                    // widerspricht es dem Versprechen der App.
+                    // With http:// to a remote host the recording goes over
+                    // the network unencrypted. That has to be said, otherwise
+                    // it contradicts the promise of the app.
                     if AppSettings.isInsecureRemoteEndpoint(serverURL) {
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "exclamationmark.triangle.fill")
@@ -158,8 +158,8 @@ struct SettingsView: View {
                     TextField(L10n.t("settings.modelName"), text: $serverModelName)
                         .textFieldStyle(.roundedBorder)
                         .onChange(of: serverModelName) { _, newValue in
-                            // Zeilenumbrueche raus: Der Wert geht unveraendert in
-                            // einen Multipart-Body, ein \r\n koennte ihn aufbrechen.
+                            // Strip line breaks: the value goes into a multipart body
+                            // unchanged, and a \r\n could break it apart.
                             AppSettings.shared.serverModelName = newValue
                                 .replacingOccurrences(of: "\r", with: "")
                                 .replacingOccurrences(of: "\n", with: "")
@@ -207,10 +207,10 @@ struct SettingsView: View {
 
                 UpdatesRow(appVersion: appVersion)
 
-                // Betroffenenrechte praktisch möglich machen: Ein Weg, alles
-                // zu entfernen, was die App gespeichert hat. Modelle bleiben
-                // absichtlich stehen, damit niemand versehentlich 1,6 GB
-                // erneut herunterlädt.
+                // Make the right to erasure practical: a way to remove
+                // everything the app has stored. Models deliberately stay,
+                // so nobody accidentally downloads 1.6 GB again.
+                //
                 SettingsRow(label: L10n.t("settings.deleteAll")) {
                     Button(L10n.t("settings.deleteAll.button"), role: .destructive) {
                         confirmDeleteAll = true
@@ -223,9 +223,9 @@ struct SettingsView: View {
                         Button(L10n.t("settings.deleteAll.confirm.keepModels"), role: .destructive) {
                             AppSettings.deleteAllData(includingModels: false)
                             reloadFromSettings()
-                            // Ohne dieses Signal bleibt der laufende whisper-server
-                            // auf dem alten Modell, und offene Fenster zeigen
-                            // weiter die eben geloeschten Zahlen.
+                            // Without this signal the running whisper-server stays on
+                            // the old model, and open windows keep showing the numbers
+                            // that were just deleted.
                             AppSettings.shared.notifyChanged()
                         }
                         Button(L10n.t("settings.deleteAll.confirm.withModels"), role: .destructive) {
@@ -249,9 +249,9 @@ struct SettingsView: View {
         }
         .toggleStyle(.switch)
         .controlSize(.small)
-        // Der Anmelde-Schalter kann auch woanders umgelegt werden (Erst-Tour,
-        // Systemeinstellungen). Deshalb beim Auftauchen und bei jedem
-        // Fensterwechsel den echten Zustand nachlesen statt einmal zu raten.
+        // The login switch can be flipped elsewhere too (first-run tour, System
+        // Settings). So read the real state again when appearing and on every
+        // window change instead of guessing once.
         .onAppear(perform: reloadFromSettings)
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             reloadFromSettings()
@@ -261,11 +261,11 @@ struct SettingsView: View {
         }
     }
 
-    /// Alle Werte neu aus den Einstellungen lesen. Das Fenster lebt die ganze
-    /// Sitzung (`isReleasedWhenClosed = false`), die @States stammen also vom
-    /// App-Start. Wer in der Erst-Tour die Diktatsprache umstellt, sah hier
-    /// sonst weiter den alten Wert - und konnte ihn nicht einmal korrigieren,
-    /// weil ein Klick auf denselben Wert kein onChange auslöst.
+    /// Read all values from the settings again. The window lives for the whole
+    /// session (`isReleasedWhenClosed = false`), so the @States come from app
+    /// start. Whoever changes the dictation language in the first-run tour would
+    /// otherwise still see the old value here, and could not even correct it,
+    /// because clicking the same value fires no onChange.
     private func reloadFromSettings() {
         let s = AppSettings.shared
         mode = s.mode.rawValue
@@ -282,9 +282,9 @@ struct SettingsView: View {
         refreshLoginItem()
     }
 
-    /// Eigene Bindung statt `onChange`: der Setter läuft nur, wenn der Nutzer
-    /// den Schalter umlegt. Nachlesen des echten Zustands schreibt dagegen nur
-    /// den State und löst keine neue Registrierung aus.
+    /// A binding of our own instead of `onChange`: the setter only runs when the
+    /// user flips the switch. Reading back the real state only writes the state
+    /// and triggers no new registration.
     private var launchBinding: Binding<Bool> {
         Binding(
             get: { launchAtLogin },
@@ -304,24 +304,24 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Whisper-Modelle (Auswahl + Download)
+// MARK: - Whisper models (selection + download)
 
 private struct ModelListView: View {
     @ObservedObject private var manager = ModelManager.shared
 
-    /// Eingeklappt, solange nichts zu tun ist: Die Liste ist mit Sprachpaketen
-    /// lang geworden, im Alltag ändert man das Modell aber fast nie.
+    /// Collapsed while there is nothing to do: the list has grown long with the
+    /// language packs, but in everyday use the model is almost never changed.
     @State private var expanded = false
 
-    /// Während eines Downloads immer offen - sonst verschwindet der
-    /// Fortschrittsbalken unter dem zugeklappten Kopf.
+    /// Always open during a download, otherwise the progress bar disappears under
+    /// the collapsed header.
     private var isOpen: Bool { expanded || !manager.progress.isEmpty }
 
     private var activeModelName: String {
         if let active = ModelManager.all.first(where: { manager.isSelected($0) }) {
             return active.displayName
         }
-        // Eigener Pfad (z. B. manuell gesetzt): Dateiname statt Anzeigename.
+        // A custom path (set manually, say): file name instead of display name.
         return URL(fileURLWithPath: AppSettings.shared.modelPath).lastPathComponent
     }
 
@@ -356,15 +356,15 @@ private struct ModelListView: View {
             }
             .buttonStyle(.plain)
             .disabled(!manager.progress.isEmpty)
-            // Startet ein Download, bleibt die Liste auch nach dessen Ende offen -
-            // sonst klappt sie genau in dem Moment zu, in dem man das frisch
-            // geladene Modell aktivieren will.
+            // When a download starts, the list stays open after it finishes too,
+            // otherwise it collapses at exactly the moment you want to activate the
+            // freshly downloaded model.
             .onChange(of: manager.progress.isEmpty) { _, empty in
                 if !empty { expanded = true }
             }
 
-            // Strukturell entfernen statt ausblenden - unsichtbare Zeilen würden
-            // die Layout-Box der Karte weiter aufblähen (Stolperfalle 5).
+            // Remove structurally instead of hiding: invisible rows would keep
+            // inflating the layout box of the card (pitfall 5).
             if isOpen {
                 ForEach(manager.visibleGeneralModels) { model in
                     ModelRow(model: model, manager: manager)
@@ -485,7 +485,7 @@ private struct ModelRow: View {
     }
 }
 
-/// Kleines "?" neben der Server-Auswahl: Popover mit Einrichtungs-Anleitung.
+/// Small "?" next to the server choice: a popover with setup instructions.
 private struct ServerHelpButton: View {
     @State private var showHelp = false
 
@@ -540,9 +540,9 @@ private struct UpdatesRow: View {
                 .controlSize(.small)
             }
         }
-        // Das Fenster lebt die ganze Sitzung, der @State-Startwert wird also nur
-        // ein einziges Mal gelesen. Ändert ein Sparkle-Dialog die Einstellung,
-        // zeigte der Schalter danach dauerhaft den Stand vom App-Start.
+        // The window lives for the whole session, so the @State initial value is
+        // only read once. If a Sparkle dialog changes the setting, the switch kept
+        // showing the state from app start forever after.
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             reload()
@@ -555,10 +555,10 @@ private struct UpdatesRow: View {
     }
 }
 
-// MARK: - Spenden
+// MARK: - Donations
 
-/// Der Weg zur Spendenseite, auch wenn das Startfenster längst weggeklickt
-/// wurde. Wer schon bestätigt hat, sieht statt der Bitte ein Dankeschön.
+/// The way to the donation page, even when the startup window was dismissed
+/// long ago. Whoever confirmed already sees a thank you instead of the ask.
 private struct SupportCard: View {
     @State private var hasDonated = AppSettings.shared.hasDonated
 
@@ -577,8 +577,8 @@ private struct SupportCard: View {
                 .controlSize(.small)
             }
         }
-        // Der Stand kann sich im Spendenfenster geändert haben, während die
-        // Einstellungen im Speicher liegen (das Fenster wird nur versteckt).
+        // The state may have changed in the donation window while the settings
+        // sit in memory (the window is only hidden).
         .onAppear { hasDonated = AppSettings.shared.hasDonated }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             hasDonated = AppSettings.shared.hasDonated
@@ -586,7 +586,7 @@ private struct SupportCard: View {
     }
 }
 
-// MARK: - Bausteine
+// MARK: - Building blocks
 
 private struct SettingsCard<Content: View>: View {
     let title: String
@@ -618,12 +618,12 @@ private struct SettingsRow<Control: View>: View {
     }
 }
 
-/// Segmentregler im Glas-Stil der Sidebar/Tabs (statt des blauen System-Pickers).
+/// Segmented control in the glass style of the sidebar/tabs (instead of the blue system picker).
 struct GlassSegmented: View {
     let options: [(value: String, label: String)]
     @Binding var selection: String
     var compact = false
-    /// Für die Erst-Tour: heller Kontrast auf dunklem Grund statt Fensterfarbe.
+    /// For the first-run tour: bright contrast on a dark ground instead of the window color.
     var onDark = false
 
     var body: some View {
@@ -648,8 +648,8 @@ struct GlassSegmented: View {
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                // Die Auswahl steckt nur in Schriftgewicht und Kapselfüllung -
-                // VoiceOver sagt ohne dieses Merkmal nicht, was aktiv ist.
+                // The selection only shows in the font weight and the capsule fill.
+                // Without this trait VoiceOver does not say what is active.
                 .accessibilityAddTraits(selected ? .isSelected : [])
                 .foregroundStyle(
                     onDark
@@ -668,7 +668,7 @@ struct GlassSegmented: View {
     }
 }
 
-/// Visuelle Positions-Auswahl: Mini-Bildschirm mit klickbaren Punkten.
+/// Visual position picker: a mini screen with clickable dots.
 private struct PositionPicker: View {
     @Binding var selection: String
 
@@ -686,7 +686,7 @@ private struct PositionPicker: View {
                 .fill(Color.primary.opacity(0.05))
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.1))
-            // "Menüleiste" des Mini-Bildschirms
+            // "menu bar" of the mini screen
             VStack {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Color.primary.opacity(0.08))
@@ -714,8 +714,8 @@ private struct PositionPicker: View {
                     .buttonStyle(.plain)
                     .position(x: geo.size.width * pos.x, y: geo.size.height * pos.y)
                     .help(OverlayPosition(rawValue: pos.value)?.title ?? "")
-                    // Fünf gleich aussehende Punkte: Der Zustand steckt sonst nur
-                    // in Farbe und 2 Punkt Größenunterschied.
+                    // Five dots that look the same: otherwise the state only shows in
+                    // the color and 2 points of size difference.
                     .accessibilityLabel(OverlayPosition(rawValue: pos.value)?.title ?? "")
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
@@ -725,7 +725,7 @@ private struct PositionPicker: View {
     }
 }
 
-/// Zeigt fehlende Berechtigungen. Ist alles erteilt, verschwindet die Karte komplett.
+/// Shows missing permissions. Once everything is granted, the card disappears completely.
 private struct PermissionsCard: View {
     @State private var axTrusted = AXIsProcessTrusted()
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -756,10 +756,10 @@ private struct PermissionsCard: View {
                 .cardStyle()
             }
         }
-        // Kein Dauer-Timer: Berechtigungen ändern sich nur in den
-        // Systemeinstellungen, also während der Nutzer nicht in Orbly ist. Ein
-        // 2-Sekunden-Timer lief vorher weiter, solange das Fenster im Speicher
-        // war, auch geschlossen (es wird nur versteckt, nicht freigegeben).
+        // No permanent timer: permissions only change in System Settings, so
+        // while the user is not in Orbly. A 2 second timer used to keep running
+        // as long as the window was in memory, closed as well (it is only
+        // hidden, not released).
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             reload()

@@ -1,15 +1,15 @@
 #!/bin/bash
-# Baut ein Distribution-DMG (App + Applications-Verknüpfung) aus der zuletzt
-# gebauten App. Mit Developer-ID-Identität wird das DMG signiert und — falls ein
-# notarytool-Profil "Orbly" hinterlegt ist — notarisiert + gestapelt.
-# Nutzung: bash scripts/make-dmg.sh            (DMG nach ~/Library/Caches/Orbly/releases)
-#          bash scripts/make-dmg.sh <ordner>   (anderes Ausgabeverzeichnis)
+# Builds a distribution DMG (app + Applications shortcut) from the app that was
+# built last. With a Developer ID identity the DMG is signed and, if a notarytool
+# profile named "Orbly" exists, notarized and stapled.
+# Usage: bash scripts/make-dmg.sh            (DMG into ~/Library/Caches/Orbly/releases)
+#        bash scripts/make-dmg.sh <folder>   (different output directory)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 BUILD_DIR="$HOME/Library/Caches/Orbly/build"
 APP="$BUILD_DIR/Orbly.app"
-[ -d "$APP" ] || { echo "App fehlt — erst 'bash scripts/build-app.sh' laufen lassen."; exit 1; }
+[ -d "$APP" ] || { echo "App missing, run 'bash scripts/build-app.sh' first."; exit 1; }
 
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")"
 OUT_DIR="${1:-$HOME/Library/Caches/Orbly/releases}"
@@ -17,7 +17,7 @@ mkdir -p "$OUT_DIR"
 DMG="$OUT_DIR/Orbly-$VERSION.dmg"
 STAGE="$BUILD_DIR/dmg-stage"
 
-echo "==> Packe Orbly-$VERSION.dmg"
+echo "==> Packing Orbly-$VERSION.dmg"
 rm -rf "$STAGE" "$DMG"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
@@ -28,30 +28,30 @@ rm -rf "$STAGE"
 IDENTITY="${ORBLY_SIGN_IDENTITY:-}"
 case "$IDENTITY" in
 "Developer ID"*)
-  echo "==> Signiere DMG ($IDENTITY)"
-  # Über den Hash signieren, genau wie build-app.sh. Über den Namen bricht
-  # codesign ab ("ambiguous"), sobald zwei Zertifikate gleich heißen.
+  echo "==> Signing the DMG ($IDENTITY)"
+  # Sign by hash, exactly like build-app.sh does. By name codesign aborts with
+  # "ambiguous" as soon as two certificates carry the same name.
   IDENTITY_HASH="$(security find-identity -v -p codesigning 2>/dev/null \
     | grep -F "\"$IDENTITY\"" | awk 'NR==1{print $2}' || true)"
-  [ -n "$IDENTITY_HASH" ] || { echo "FEHLER: '$IDENTITY' nicht im Schlüsselbund." >&2; exit 1; }
+  [ -n "$IDENTITY_HASH" ] || { echo "ERROR: '$IDENTITY' is not in the keychain." >&2; exit 1; }
   codesign --force --timestamp --sign "$IDENTITY_HASH" "$DMG"
   if NOTARY_CHECK="$(xcrun notarytool history --keychain-profile Orbly 2>&1)"; then
-    echo "==> Notarisiere bei Apple (dauert meist 1–5 Minuten) …"
+    echo "==> Notarizing with Apple (usually 1-5 minutes) …"
     xcrun notarytool submit "$DMG" --keychain-profile Orbly --wait
     xcrun stapler staple "$DMG"
-    echo "==> Notarisiert & gestapelt — läuft ohne Gatekeeper-Warnung."
+    echo "==> Notarized and stapled, runs without a Gatekeeper warning."
   else
-    # Nicht pauschal „kein Profil" melden: Netzfehler, abgelaufenes App-Passwort
-    # und fehlendes Profil sehen sonst identisch aus.
-    echo "Hinweis: notarytool nicht nutzbar — DMG ist signiert, aber NICHT notarisiert"
-    echo "(Gatekeeper warnt auf fremden Macs). Meldung von Apple:"
+    # Do not report a blanket "no profile": a network error, an expired app
+    # password and a missing profile would otherwise look identical.
+    echo "Note: notarytool not usable, the DMG is signed but NOT notarized"
+    echo "(Gatekeeper warns on other people's Macs). Apple says:"
     echo "$NOTARY_CHECK" | tail -3
-    echo "Profil einrichten mit:"
-    echo "  xcrun notarytool store-credentials Orbly --apple-id <apple-id> --team-id H8XJ9NV6ZQ"
+    echo "Set up a profile with:"
+    echo "  xcrun notarytool store-credentials Orbly --apple-id <apple-id> --team-id \"\$ORBLY_TEAM_ID\""
   fi
   ;;
 *)
-  echo "Hinweis: ohne Developer-ID-Identität bleibt das DMG unsigniert (nur für dich selbst nutzbar)."
+  echo "Note: without a Developer ID identity the DMG stays unsigned (usable on this Mac only)."
   ;;
 esac
 

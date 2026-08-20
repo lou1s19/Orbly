@@ -1,14 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Spendenfenster im Look der Erst-Tour (dunkel, Nachthimmel, eine helle
-/// Kapsel). Zwei Zustände: fragen und danken.
+/// Donation window in the look of the first-run tour (dark, night sky, one
+/// bright capsule). Two states: asking and saying thanks.
 ///
-/// „Ich habe gespendet" erscheint erst, nachdem die Spendenseite geöffnet wurde.
-/// Vorher wäre es nur ein zweiter Knopf zum Wegklicken.
+/// "I donated" only appears after the donation page has been opened. Before
+/// that it would just be a second button to dismiss.
 struct DonationView: View {
     let dictations: Int
-    /// Fenster schließen. Das Speichern passiert vorher hier in der Ansicht.
+    /// Close the window. Saving happens before that, here in the view.
     let close: () -> Void
 
     @State private var pageOpened = false
@@ -72,7 +72,7 @@ struct DonationView: View {
                 GhostPillButton(title: L10n.t("donate.confirm"), systemImage: "checkmark") {
                     AppSettings.shared.hasDonated = true
                     thanks = true
-                    // Kurz stehen lassen, dann von selbst schließen.
+                    // Let it stand for a moment, then close by itself.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { close() }
                 }
                 .padding(.top, 10)

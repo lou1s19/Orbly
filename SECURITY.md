@@ -1,34 +1,34 @@
-# Sicherheitslücken melden
+# Reporting a security issue
 
-Wenn du eine Sicherheitslücke findest, mach dafür **kein öffentliches Issue** auf.
+If you find a security issue, please do **not** open a public issue for it.
 
-Nutze stattdessen die private Meldefunktion von GitHub:
-[Security Advisory melden](https://github.com/lou1s19/Orbly/security/advisories/new)
+Use GitHub's private reporting instead:
+[Report a security advisory](https://github.com/lou1s19/Orbly/security/advisories/new)
 
-Ich melde mich innerhalb weniger Tage. Wenn du möchtest, wirst du im Fix genannt.
+You will get an answer within a few days. If you want to be credited in the fix,
+say so.
 
-## Was in diesem Projekt sicherheitsrelevant ist
+## What is security relevant in this project
 
-Orbly braucht zwei Berechtigungen, die weit reichen, und verarbeitet Sprache:
+Orbly needs two far-reaching permissions and processes speech:
 
-- **Bedienungshilfen.** Nötig für die Fn-Taste in jeder App und für das Einfügen per
-  simuliertem ⌘V. Damit könnte die App theoretisch Tastatureingaben mitlesen. Sie tut
-  es nicht: Der globale Monitor in `FnKeyMonitor.swift` gibt ausschließlich den
-  `keyCode` weiter und speichert nichts.
-- **Mikrofon.** Die Aufnahme geht als WAV an den Transkriptions-Endpunkt und wird
-  danach gelöscht.
-- **Zwischenablage.** Der Text wird kurz hineingelegt, eingefügt, und der vorherige
-  Inhalt wird wiederhergestellt. Diktate sind mit
-  `org.nspasteboard.ConcealedType` markiert, damit Zwischenablage-Verwalter sie nicht
-  archivieren.
+- **Accessibility.** Required for the Fn key to work in every app and for pasting
+  through a simulated ⌘V. In theory the app could read along with everything you
+  type. It does not: the global monitor in `FnKeyMonitor.swift` only forwards the
+  `keyCode` and stores nothing.
+- **Microphone.** The recording goes to the transcription endpoint as a WAV file
+  and is deleted afterwards.
+- **Clipboard.** The text is placed there briefly, pasted, and the previous
+  content is restored. Dictations are marked with
+  `org.nspasteboard.ConcealedType` so clipboard managers do not archive them.
 
-Besonders interessant für einen Blick: `TextInserter.swift`, `FnKeyMonitor.swift`,
-`LocalServerManager.swift` (startet einen Unterprozess) und `Models.swift`
-(Modell-Downloads, per SHA-256 geprüft).
+Worth a close look: `TextInserter.swift`, `FnKeyMonitor.swift`,
+`LocalServerManager.swift` (starts a subprocess) and `Models.swift` (model
+downloads, verified by SHA-256).
 
-## Was keine Lücke ist
+## What is not a vulnerability
 
-- Im Server-Modus über `http://` ist die Verbindung unverschlüsselt. Das ist bekannt,
-  die Einstellungen warnen davor, und es betrifft nur selbst eingetragene Adressen.
-- `NSAllowsArbitraryLoads` ist aktiv, weil Nutzer beliebige eigene Server eintragen
-  können, auch im VPN. Standard ist `127.0.0.1`.
+- In server mode over `http://` the connection is unencrypted. That is known, the
+  settings warn about it, and it only affects addresses you entered yourself.
+- `NSAllowsArbitraryLoads` is on because users can point the app at any server of
+  their own, including inside a VPN. The default is `127.0.0.1`.

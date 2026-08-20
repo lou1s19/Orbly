@@ -2,8 +2,8 @@ import AppKit
 import MetalKit
 import SwiftUI
 
-/// Metal-Port des 21st.dev "Voice Powered Orb"-GLSL-Shaders.
-/// Wird zur Laufzeit kompiliert (kein Metal-Toolchain beim Build noetig).
+/// Metal port of the 21st.dev "Voice Powered Orb" GLSL shader.
+/// Compiled at runtime (no Metal toolchain needed at build time).
 enum OrbShader {
     static let source = """
     #include <metal_stdlib>
@@ -157,7 +157,7 @@ enum OrbShader {
         uv.y += u.hover * u.hoverIntensity * 0.1 * sin(uv.x * 10.0 + u.time);
 
         float4 col = drawOrb(uv, u);
-        // Mono-Variante: auf Luminanz reduzieren, leicht aufgehellt
+        // Mono variant: reduce to luminance, slightly brightened
         if (u.mono > 0.5) {
             float g = dot(col.rgb, float3(0.299, 0.587, 0.114));
             col.rgb = float3(pow(g, 0.85));
@@ -190,19 +190,19 @@ final class OrbRenderer: NSObject, MTKViewDelegate {
         self.state = state
     }
 
-    /// Einmal gebaute Pipeline, für die ganze Programmlaufzeit.
+    /// Pipeline built once, for the whole lifetime of the process.
     ///
-    /// `makeLibrary(source:)` kompiliert den Shader zur Laufzeit aus dem
-    /// Quelltext, das kostet 30 bis 150 ms auf dem Hauptthread. Die MTKView wird
-    /// aber jedes Mal ab- und wieder aufgebaut, wenn das Overlay verschwindet
-    /// oder ein Hinweis erscheint. Ohne diesen Zwischenspeicher fiele die
-    /// Kompilierung genau beim Fn-Druck an, also wenn das Overlay sofort da sein
-    /// soll. `nil` = schon einmal versucht und fehlgeschlagen.
+    /// `makeLibrary(source:)` compiles the shader from source at runtime, which
+    /// costs 30 to 150 ms on the main thread. The MTKView is torn down and rebuilt
+    /// every time the overlay disappears or a note appears. Without this cache the
+    /// compilation would happen exactly on the Fn press, which is when the overlay
+    /// has to be there immediately. `nil` means it was tried once and failed.
+    ///
     private static var sharedPipeline: (pipeline: MTLRenderPipelineState, queue: MTLCommandQueue)?
     private static var setupFailed = false
 
-    /// true, wenn die Pipeline steht. false heißt: Der Orb kann nicht gezeichnet
-    /// werden (Aufrufer fällt dann auf den Pill-Stil zurück).
+    /// true when the pipeline is up. false means the orb cannot be drawn (the
+    /// caller then falls back to the pill style).
     @discardableResult
     func setup(device: MTLDevice) -> Bool {
         if let shared = Self.sharedPipeline {
@@ -261,7 +261,7 @@ final class OrbRenderer: NSObject, MTKViewDelegate {
         let targetHover = min(level * 2.0, 1.0)
         hover += (targetHover - hover) * 0.25
         time += dt
-        // wie in der Vorlage: Stimme beschleunigt die Rotation
+        // as in the original: the voice speeds up the rotation
         if level > 0.05 {
             rot += dt * (0.3 + level * 2.4)
         }
@@ -292,16 +292,16 @@ struct OrbMetalView: NSViewRepresentable {
         OrbRenderer(state: state)
     }
 
-    /// Gibt es kein Metal-Gerät oder scheitert die Shader-Kompilierung, würde die
-    /// Orb-Ansicht dauerhaft leer bleiben - beim Diktieren wäre dann GAR KEIN
-    /// Overlay zu sehen (orbMono ist der Standardstil) und die App wirkte tot.
-    /// Dann auf den reinen SwiftUI-Stil „pill" zurückfallen.
+    /// Without a Metal device, or when shader compilation fails, the orb view
+    /// would stay empty forever. There would be NO overlay at all while dictating
+    /// (orbMono is the default style) and the app would look dead. Fall back to
+    /// the plain SwiftUI style "pill" then.
     private static func fallBackToPill(_ reason: String) {
-        NSLog("Orbly: Orb-Overlay nicht verfügbar (\(reason)) - zeige stattdessen den Pill-Stil")
-        // Bewusst NUR im Speicher: Die gespeicherte Wahl des Nutzers bleibt
-        // stehen. Ein einmaliger Fehlschlag (VM, schneller Benutzerwechsel)
-        // darf seine Einstellung nicht dauerhaft überschreiben, ohne dass er
-        // erfährt, warum sein Overlay anders aussieht.
+        NSLog("Orbly: orb overlay not available (\(reason)), showing the pill style instead")
+        // Deliberately IN MEMORY only: the user's stored choice stays as it
+        // is. A one-off failure (VM, fast user switching) must not overwrite
+        // their setting for good without them learning why their overlay
+        // looks different.
         DispatchQueue.main.async { OverlayStyleFallback.orbUnavailable = true }
     }
 
@@ -319,14 +319,14 @@ struct OrbMetalView: NSViewRepresentable {
                 Self.fallBackToPill("Shader-Kompilierung fehlgeschlagen")
             }
         } else {
-            Self.fallBackToPill("kein Metal-Gerät")
+            Self.fallBackToPill("no Metal device")
         }
         v.delegate = context.coordinator
         return v
     }
 
     func updateNSView(_ view: MTKView, context: Context) {
-        // Kein 60-fps-Rendering im Hintergrund, wenn das Overlay ausgeblendet ist
+        // No 60 fps rendering in the background while the overlay is hidden
         view.isPaused = !state.overlayVisible
     }
 }

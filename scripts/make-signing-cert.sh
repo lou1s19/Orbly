@@ -1,18 +1,17 @@
 #!/bin/bash
-# Erzeugt einmalig ein selbstsigniertes Codesigning-Zertifikat "Orbly Dev"
-# im Login-Schlüsselbund. Damit behält die App über Neubauten hinweg dieselbe
-# Identität - und macOS verwirft die Bedienungshilfen-Berechtigung NICHT mehr
-# bei jedem Build (das passiert bei Ad-hoc-Signierung, weil sich der Code-Hash
-# jedes Mal ändert).
+# Creates a self-signed code signing certificate "Orbly Dev" in the login
+# keychain, once. With it the app keeps the same identity across rebuilds, and
+# macOS stops dropping the accessibility permission on every build (which is
+# what happens with ad-hoc signing, because the code hash changes each time).
 #
-# Einmal ausführen, danach signiert scripts/build-app.sh automatisch damit.
+# Run it once, after that scripts/build-app.sh signs with it automatically.
 set -euo pipefail
 
 NAME="Orbly Dev"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -q "$NAME"; then
-  echo "Zertifikat '$NAME' existiert bereits - nichts zu tun."
+  echo "Certificate '$NAME' already exists, nothing to do."
   exit 0
 fi
 
@@ -32,28 +31,28 @@ extendedKeyUsage = critical,codeSigning
 basicConstraints = critical,CA:false
 EOF
 
-echo "==> Erzeuge Schlüssel + Zertifikat (gültig 10 Jahre)"
+echo "==> Creating key and certificate (valid for 10 years)"
 openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
   -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/openssl.cnf" >/dev/null 2>&1
 
 openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
   -name "$NAME" -passout pass:orbly -out "$TMP/identity.p12"
 
-echo "==> Importiere in den Login-Schlüsselbund"
+echo "==> Importing into the login keychain"
 security import "$TMP/identity.p12" -k "$KEYCHAIN" -P orbly -T /usr/bin/codesign
 
-echo "==> Markiere Zertifikat als vertrauenswürdig für Codesigning"
-echo "    (macOS fragt jetzt einmal nach deinem Passwort)"
+echo "==> Marking the certificate as trusted for code signing"
+echo "    (macOS asks for your password once now)"
 security add-trusted-cert -d -r trustRoot -p codeSign -k "$KEYCHAIN" "$TMP/cert.pem" \
   || security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$TMP/cert.pem"
 
-echo "==> Erlaube codesign den Schlüsselzugriff ohne Dialog"
-echo "    (fragt nach dem Passwort deines Login-Schlüsselbunds = Anmelde-Passwort)"
+echo "==> Allowing codesign to use the key without a dialog"
+echo "    (asks for your login keychain password, which is your account password)"
 security set-key-partition-list -S "apple-tool:,apple:" -s -l "$NAME" "$KEYCHAIN" >/dev/null \
-  || echo "    Übersprungen - dann fragt macOS beim ersten Signieren einmal per Dialog ('Immer erlauben' wählen)."
+  || echo "    Skipped. macOS will ask once with a dialog on the first signing, choose 'Always Allow'."
 
 echo ""
-echo "Fertig. Ab jetzt signiert scripts/build-app.sh stabil mit '$NAME'."
-echo "Nach dem NÄCHSTEN Build einmalig: Systemeinstellungen → Datenschutz & Sicherheit"
-echo "→ Bedienungshilfen → Orbly entfernen (-) und neu hinzufügen (+)."
-echo "Danach übersteht die Berechtigung alle weiteren Builds."
+echo "Done. From now on scripts/build-app.sh signs stably with '$NAME'."
+echo "After the NEXT build, once: System Settings > Privacy & Security"
+echo "> Accessibility > remove Orbly (-) and add it again (+)."
+echo "After that the permission survives all further builds."

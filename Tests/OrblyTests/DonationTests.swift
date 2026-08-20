@@ -1,72 +1,72 @@
 import XCTest
 @testable import Orbly
 
-/// Der Spendenhinweis darf zwei Fehler nicht machen: zu früh oder zu oft
-/// erscheinen, und nach einer Spende überhaupt noch einmal auftauchen.
+/// The donation prompt must not make two mistakes: appear too early or too
+/// often, and show up again at all after someone donated.
 final class DonationTests: XCTestCase {
 
-    private let jetzt = Date(timeIntervalSince1970: 1_800_000_000)
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func stand(
-        gespendet: Bool = false,
-        abbestellt: Bool = false,
-        tourFertig: Bool = true,
-        diktate: Int = Donation.minimumDictations,
-        zuletzt: Date? = nil
+    private func state(
+        donated: Bool = false,
+        optedOut: Bool = false,
+        tourDone: Bool = true,
+        dictations: Int = Donation.minimumDictations,
+        lastShown: Date? = nil
     ) -> Donation.State {
         Donation.State(
-            hasDonated: gespendet,
-            promptDisabled: abbestellt,
-            onboardingCompleted: tourFertig,
-            dictations: diktate,
-            lastShown: zuletzt
+            hasDonated: donated,
+            promptDisabled: optedOut,
+            onboardingCompleted: tourDone,
+            dictations: dictations,
+            lastShown: lastShown
         )
     }
 
-    func testErsteAnzeigeAbDerSchwelle() {
-        XCTAssertTrue(Donation.shouldShow(stand(), now: jetzt))
+    func testFirstPromptFromTheThresholdOn() {
+        XCTAssertTrue(Donation.shouldShow(state(), now: now))
     }
 
-    func testVorDerSchwelleNicht() {
-        let knappDrunter = stand(diktate: Donation.minimumDictations - 1)
-        XCTAssertFalse(Donation.shouldShow(knappDrunter, now: jetzt))
+    func testNotBeforeTheThreshold() {
+        let justBelow = state(dictations: Donation.minimumDictations - 1)
+        XCTAssertFalse(Donation.shouldShow(justBelow, now: now))
     }
 
-    /// Wer noch in der Erst-Tour steckt, soll keine Spendenbitte bekommen.
-    func testWaehrendDerErstTourNicht() {
-        XCTAssertFalse(Donation.shouldShow(stand(tourFertig: false), now: jetzt))
+    /// Whoever is still in the first-run tour should not get a donation prompt.
+    func testNotDuringTheFirstRunTour() {
+        XCTAssertFalse(Donation.shouldShow(state(tourDone: false), now: now))
     }
 
-    /// Der Kern der Anforderung: nach einer Spende ist dauerhaft Ruhe.
-    func testNachSpendeNie() {
-        let gespendet = stand(gespendet: true, diktate: 10_000, zuletzt: nil)
-        XCTAssertFalse(Donation.shouldShow(gespendet, now: jetzt))
+    /// The core requirement: after a donation there is silence for good.
+    func testNeverAfterADonation() {
+        let donated = state(donated: true, dictations: 10_000, lastShown: nil)
+        XCTAssertFalse(Donation.shouldShow(donated, now: now))
     }
 
-    func testNachAbbestellenNie() {
-        XCTAssertFalse(Donation.shouldShow(stand(abbestellt: true), now: jetzt))
+    func testNeverAfterOptingOut() {
+        XCTAssertFalse(Donation.shouldShow(state(optedOut: true), now: now))
     }
 
-    func testInnerhalbDerPauseNicht() {
-        let vorEinemTag = jetzt.addingTimeInterval(-86_400)
-        XCTAssertFalse(Donation.shouldShow(stand(zuletzt: vorEinemTag), now: jetzt))
+    func testNotWithinThePause() {
+        let aDayAgo = now.addingTimeInterval(-86_400)
+        XCTAssertFalse(Donation.shouldShow(state(lastShown: aDayAgo), now: now))
     }
 
-    func testNachDerPauseWieder() {
-        let abstand = Double(Donation.repeatAfterDays) * 86_400 + 60
-        let lange = jetzt.addingTimeInterval(-abstand)
-        XCTAssertTrue(Donation.shouldShow(stand(zuletzt: lange), now: jetzt))
+    func testAgainAfterThePause() {
+        let gap = Double(Donation.repeatAfterDays) * 86_400 + 60
+        let longAgo = now.addingTimeInterval(-gap)
+        XCTAssertTrue(Donation.shouldShow(state(lastShown: longAgo), now: now))
     }
 
-    /// Verstellte Uhr: gespeicherter Zeitpunkt liegt in der Zukunft. Dann lieber
-    /// schweigen, statt bei jedem Start zu fragen.
-    func testZukunftsdatumFragtNicht() {
-        let morgen = jetzt.addingTimeInterval(86_400)
-        XCTAssertFalse(Donation.shouldShow(stand(zuletzt: morgen), now: jetzt))
+    /// Clock changed: the stored date is in the future. Then stay quiet rather
+    /// than ask on every launch.
+    func testAFutureDateDoesNotAsk() {
+        let tomorrow = now.addingTimeInterval(86_400)
+        XCTAssertFalse(Donation.shouldShow(state(lastShown: tomorrow), now: now))
     }
 
-    /// Die Spendenadresse muss erreichbar aussehen, sonst öffnet der Knopf nichts.
-    func testSpendenadresseIstHttps() {
+    /// The donation address has to look reachable, otherwise the button opens nothing.
+    func testDonationAddressIsHttps() {
         XCTAssertEqual(Donation.pageURL.scheme, "https")
         XCTAssertEqual(Donation.pageURL.host, "ko-fi.com")
     }

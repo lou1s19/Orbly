@@ -1,7 +1,7 @@
 import Foundation
 
-/// Liest den Speicherverbrauch (RSS) einzelner Prozesse über /bin/ps -
-/// reicht für die Anzeige im Dashboard, ohne private APIs.
+/// Reads the memory usage (RSS) of individual processes through /bin/ps.
+/// Enough for the dashboard display, without private APIs.
 enum MemoryUsage {
     static func residentBytes(pids: [pid_t], completion: @escaping ([pid_t: UInt64]) -> Void) {
         guard !pids.isEmpty else {
@@ -28,7 +28,7 @@ enum MemoryUsage {
                     }
                 }
             } catch {
-                NSLog("Orbly: ps für RAM-Anzeige fehlgeschlagen: \(error)")
+                NSLog("Orbly: ps for the memory display failed: \(error)")
             }
             DispatchQueue.main.async { completion(result) }
         }

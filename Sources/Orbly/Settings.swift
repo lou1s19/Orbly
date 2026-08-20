@@ -6,21 +6,21 @@ enum TranscriptionMode: String {
     case server
 }
 
-/// Was mit laufender Musik (Music/Spotify) beim Diktieren passiert.
+/// What happens to music playing (Music/Spotify) while dictating.
 enum MediaDictationMode: String {
-    case off    // nichts tun
-    case duck   // leiser machen, danach zurückdrehen (Standard)
-    case pause  // pausieren, danach weiterspielen
+    case off    // do nothing
+    case duck   // turn down, turn back up afterwards (default)
+    case pause  // pause, resume afterwards
 }
 
 extension Timer {
-    /// Wie `scheduledTimer`, aber im `.common`-Modus der Ereignisschleife.
+    /// Like `scheduledTimer`, but in the `.common` mode of the run loop.
     ///
-    /// `Timer.scheduledTimer` hängt sich nur in `.default`. Sobald ein Menü offen
-    /// ist oder der Nutzer scrollt oder zieht, wechselt der RunLoop nach
-    /// `.eventTracking` und der Timer steht still. Für Sicherheitsnetze wie den
-    /// Fn-Wächter oder das Aufnahme-Zeitlimit ist genau das der falsche Moment
-    /// zum Pausieren.
+    /// `Timer.scheduledTimer` only attaches itself to `.default`. As soon as a
+    /// menu is open or the user scrolls or drags, the run loop switches to
+    /// `.eventTracking` and the timer stands still. For safety nets like the Fn
+    /// watchdog or the recording time limit, that is exactly the wrong moment to
+    /// pause.
     static func scheduledCommon(
         every interval: TimeInterval, repeats: Bool,
         tolerance: TimeInterval = 0,
@@ -33,9 +33,9 @@ extension Timer {
     }
 }
 
-/// Sprachauswahl fürs Diktat - dieselbe Liste in Einstellungen und Erst-Tour.
+/// Language choice for dictation, the same list in settings and first-run tour.
 enum SupportedLanguages {
-    /// „Auto" ist ein echtes Wort und wird übersetzt, die Sprachkürzel nicht.
+    /// "Auto" is a real word and gets translated, the language codes do not.
     static var dictationOptions: [(value: String, label: String)] {
         [
             ("auto", L10n.t("settings.language.auto")), ("de", "DE"), ("en", "EN"),
@@ -44,23 +44,23 @@ enum SupportedLanguages {
     }
 }
 
-/// „Beim Anmelden starten" - an zwei Stellen bedienbar (Einstellungen, Tour).
+/// "Start at login", operable in two places (settings, tour).
 enum LoginItem {
     static var status: SMAppService.Status { SMAppService.mainApp.status }
 
     static var isEnabled: Bool { status == .enabled }
 
-    /// Registrierung steht, aber macOS wartet noch auf die Bestätigung des
-    /// Nutzers (Systemeinstellungen → Allgemein → Anmeldeobjekte). Passiert
-    /// u. a., wenn dort früher einmal abgelehnt wurde.
+    /// Registration is done, but macOS is still waiting for the user to confirm
+    /// it (System Settings > General > Login Items). Happens among other things
+    /// when it was declined there once before.
     static var needsApproval: Bool { status == .requiresApproval }
 
-    /// Was der Schalter zeigen soll: registriert ist registriert, auch wenn die
-    /// Bestätigung noch fehlt. Sonst springt er scheinbar grundlos zurück.
+    /// What the switch should show: registered is registered, even when the
+    /// confirmation is still missing. Otherwise it jumps back for no visible reason.
     static var isOn: Bool { isEnabled || needsApproval }
 
-    /// Setzt den Zustand und liefert zurück, was danach wirklich gilt - schlägt
-    /// die Registrierung fehl, springt der Schalter zurück statt zu lügen.
+    /// Sets the state and returns what really holds afterwards. If registration
+    /// fails, the switch jumps back instead of lying.
     @discardableResult
     static func set(_ enabled: Bool) -> Bool {
         guard enabled != isOn else { return isOn }
@@ -73,11 +73,11 @@ enum LoginItem {
         } catch {
             NSLog("Orbly: Login-Item fehlgeschlagen: \(error)")
         }
-        // Nicht den Wunsch zurückgeben, sondern nachsehen, was das System sagt.
+        // Do not return the wish, look at what the system says.
         return isOn
     }
 
-    /// Systemeinstellungen an der richtigen Stelle öffnen (Anmeldeobjekte).
+    /// Open System Settings in the right place (Login Items).
     static func openSystemSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }
@@ -94,46 +94,46 @@ final class AppSettings {
         Self.repairLegacyModelPathIfNeeded(into: d)
     }
 
-    /// Eigener Durchgang mit eigenem Marker, ausdrücklich NICHT in
+    /// A pass of its own with a marker of its own, explicitly NOT in
     /// `migrateLegacyDefaultsIfNeeded`.
     ///
-    /// Die Versionen 1.0.0 und 1.1.0 setzten deren Marker, BEVOR sie die Arbeit
-    /// machten. Wer damals umgestiegen ist, hat also Marker gleich true und
-    /// trotzdem einen `modelPath`, der noch auf `.../FlowWhisper/models/...`
-    /// zeigt. Genau diese Nutzer sehen dauerhaft „Modell fehlt", obwohl die
-    /// Datei beim Ordner-Umzug mitgewandert ist. Stünde die Reparatur hinter dem
-    /// alten Marker, erreichte sie ausgerechnet sie nicht.
+    /// Versions 1.0.0 and 1.1.0 set that marker BEFORE they did the work. Whoever
+    /// migrated back then has the marker at true and still a `modelPath` pointing
+    /// at `.../FlowWhisper/models/...`. Exactly those users see "model missing"
+    /// permanently although the file moved along with the folder. If the repair
+    /// sat behind the old marker, it would never reach them of all people.
+    ///
     private static func repairLegacyModelPathIfNeeded(into d: UserDefaults) {
         let markerKey = "repairedLegacyModelPath"
         guard !d.bool(forKey: markerKey) else { return }
         if let old = d.string(forKey: "modelPath"), old.contains("/FlowWhisper/") {
             let neu = old.replacingOccurrences(of: "/FlowWhisper/", with: "/Orbly/")
             d.set(neu, forKey: "modelPath")
-            NSLog("Orbly: Modellpfad aus der FlowWhisper-Zeit korrigiert")
+            NSLog("Orbly: repaired a model path from the FlowWhisper days")
         }
         d.set(true, forKey: markerKey)
     }
 
-    /// Einmalige Übernahme aller Einstellungen aus der Zeit vor der Umbenennung
-    /// (Defaults-Domain com.louis.flowwhisper -> com.louis.orbly).
+    /// One-time takeover of all settings from before the rename (defaults domain
+    /// com.louis.flowwhisper -> com.louis.orbly).
     private static func migrateLegacyDefaultsIfNeeded(into d: UserDefaults) {
         let markerKey = "migratedFromFlowWhisper"
         guard !d.bool(forKey: markerKey) else { return }
         let legacyPlist = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Preferences/com.louis.flowwhisper.plist")
         guard let legacy = NSDictionary(contentsOf: legacyPlist) as? [String: Any] else {
-            // Nichts zu übernehmen. Marker trotzdem setzen, sonst wird bei JEDEM
-            // Start erneut nach der alten Plist gesucht.
+            // Nothing to take over. Set the marker anyway, otherwise the old plist is
+            // looked up again on EVERY launch.
             d.set(true, forKey: markerKey)
             return
         }
         for (key, value) in legacy where d.object(forKey: key) == nil {
             d.set(value, forKey: key)
         }
-        // Marker erst NACH getaner Arbeit setzen: Ein einmaliger Lesefehler hätte
-        // die Übernahme sonst für immer verhindert.
+        // Only set the marker AFTER the work is done: a one-off read error would
+        // otherwise have prevented the takeover forever.
         d.set(true, forKey: markerKey)
-        NSLog("Orbly: \(legacy.count) Einstellungen von FlowWhisper übernommen")
+        NSLog("Orbly: \(legacy.count) settings taken over from FlowWhisper")
     }
 
     var mode: TranscriptionMode {
@@ -141,16 +141,16 @@ final class AppSettings {
         set { d.set(newValue.rawValue, forKey: "mode") }
     }
 
-    /// Eigener Transkriptions-Server. Standard ist LEER: Vorher stand hier die
-    /// Adresse aus dem Setup des Entwicklers (`http://ubuntu-server:8643`).
-    /// „ubuntu-server" ist der Standard-Rechnername jeder Ubuntu-Server-Installation,
-    /// im Servermodus wäre die Aufnahme also im Klartext an irgendeinen Rechner im
-    /// selben Netz gegangen.
+    /// Your own transcription server. The default is EMPTY: this used to hold the
+    /// address from the developer's own setup (`http://ubuntu-server:8643`).
+    /// "ubuntu-server" is the default host name of every Ubuntu Server install, so
+    /// in server mode the recording would have gone in the clear to some machine
+    /// on the same network.
     var serverURL: String {
         get {
             let stored = d.string(forKey: "serverURL")
-            // Bestandsinstallationen: alter Default zeigte auf Port 8642,
-            // der Installer nutzt 8643.
+            // Existing installations: the old default pointed at port 8642,
+            // the installer uses 8643.
             if stored == "http://ubuntu-server:8642/inference" {
                 return "http://ubuntu-server:8643/inference"
             }
@@ -159,97 +159,97 @@ final class AppSettings {
         set { d.set(newValue, forKey: "serverURL") }
     }
 
-    /// Diktate in Verlauf.md mitschreiben (Klartext auf der Platte).
+    /// Keep dictations in the history (plain text on disk).
     var historyEnabled: Bool {
         get { d.object(forKey: "historyEnabled") as? Bool ?? true }
         set { d.set(newValue, forKey: "historyEnabled") }
     }
 
-    /// Text nach dem Diktat automatisch ins aktive Fenster einfügen (simuliertes Cmd+V).
-    /// Aus = Text landet nur in der Zwischenablage.
+    /// Insert the text into the active window automatically after a dictation
+    /// (simulated Cmd+V). Off = the text only goes to the clipboard.
     var autoInsert: Bool {
         get { d.object(forKey: "autoInsert") as? Bool ?? true }
         set { d.set(newValue, forKey: "autoInsert") }
     }
 
-    /// Laufende Musik (Music/Spotify) beim Diktieren leiser machen, pausieren oder in Ruhe lassen.
+    /// Turn playing music (Music/Spotify) down while dictating, pause it, or leave it alone.
     var mediaDuringDictation: MediaDictationMode {
         get {
             if let raw = d.string(forKey: "mediaDuringDictation") {
                 return MediaDictationMode(rawValue: raw) ?? .duck
             }
-            // Migration vom kurzlebigen Bool-Schalter (war: Pausieren an/aus).
+            // Migration from the short-lived boolean switch (was: pause on/off).
             if d.object(forKey: "pauseMediaDuringDictation") as? Bool == true { return .pause }
             return .duck
         }
         set { d.set(newValue.rawValue, forKey: "mediaDuringDictation") }
     }
 
-    /// Lokalen whisper-server nach 3 min ohne Diktat beenden (gibt ~650 MB
-    /// frei); beim nächsten Fn-Druck startet er automatisch neu und lädt das
-    /// Modell, während gesprochen wird. Standard AN - der Kaltstart ist mit
-    /// ~0,7 s kürzer als jedes Diktat und dadurch nicht spürbar.
+    /// Stop the local whisper-server after 3 minutes without a dictation (frees
+    /// about 650 MB). On the next Fn press it restarts automatically and loads the
+    /// model while you are speaking. Default ON: at about 0.7 s the cold start is
+    /// shorter than any dictation and therefore not noticeable.
     var serverIdleShutdown: Bool {
         get { d.object(forKey: "serverIdleShutdown") as? Bool ?? true }
         set { d.set(newValue, forKey: "serverIdleShutdown") }
     }
 
-    /// Erkennungssprache fürs Diktat: "auto" oder ISO-Code (de/en/es/fr/ru).
+    /// Detection language for dictation: "auto" or an ISO code (de/en/es/fr/ru).
     ///
-    /// Standard ist "auto", nicht "de". Vorher bekam jede frische Installation
-    /// weltweit Deutsch: Auf einem englischen Mac ging `language=de` an whisper,
-    /// und die Modell-Empfehlung schlug allen das deutsche Fine-Tune vor.
+    /// The default is "auto", not "de". Before this every fresh installation
+    /// worldwide got German: on an English Mac `language=de` went to whisper, and
+    /// the model recommendation suggested the German fine-tune to everyone.
     var language: String {
         get { d.string(forKey: "language") ?? "auto" }
         set { d.set(newValue, forKey: "language") }
     }
 
-    /// Erst-Tour bereits gezeigt (oder übersprungen).
+    /// First-run tour already shown (or skipped).
     var onboardingCompleted: Bool {
         get { d.bool(forKey: "onboardingCompleted") }
         set { d.set(newValue, forKey: "onboardingCompleted") }
     }
 
-    // MARK: - Spendenhinweis (Regeln stehen in Donation.swift)
+    // MARK: - Donation prompt (the rules live in Donation.swift)
 
-    /// Selbst bestätigt: „Ich habe gespendet". Danach kommt der Hinweis nie wieder.
+    /// Confirmed by the user: "I donated". After that the prompt never comes back.
     var hasDonated: Bool {
         get { d.bool(forKey: "hasDonated") }
         set { d.set(newValue, forKey: "hasDonated") }
     }
 
-    /// „Nicht mehr fragen" im Spendenfenster.
+    /// "Do not ask again" in the donation window.
     var donationPromptDisabled: Bool {
         get { d.bool(forKey: "donationPromptDisabled") }
         set { d.set(newValue, forKey: "donationPromptDisabled") }
     }
 
-    /// Wann der Hinweis zuletzt zu sehen war.
+    /// When the prompt was last seen.
     var donationPromptLastShown: Date? {
         get { d.object(forKey: "donationPromptLastShown") as? Date }
         set { d.set(newValue, forKey: "donationPromptLastShown") }
     }
 
-    /// Zahl der abgeschlossenen Diktate. Nur ein Zähler für den Spendenhinweis,
-    /// bewusst nicht aus der Statistik gelesen: die liegt in einer Datei, die
-    /// gelöscht werden darf, und ihre Auswertung läuft asynchron.
+    /// Number of finished dictations. Only a counter for the donation prompt,
+    /// deliberately not read from the statistics: those live in a file that may be
+    /// deleted, and evaluating them runs asynchronously.
     var dictationCount: Int {
         get { d.integer(forKey: "dictationCount") }
         set { d.set(newValue, forKey: "dictationCount") }
     }
 
-    /// UI-Sprache der App: "auto" (= Systemsprache) oder ISO-Code (en/de/es/fr/ru).
+    /// UI language of the app: "auto" (= system language) or an ISO code (en/de/es/fr/ru).
     var appLanguage: String {
         get { d.string(forKey: "appLanguage") ?? "auto" }
         set { d.set(newValue, forKey: "appLanguage") }
     }
 
-    /// Aufgelöste UI-Sprache (Systemsprache, wenn "auto").
+    /// Resolved UI language (system language when "auto").
     var resolvedAppLanguage: String {
         appLanguage == "auto" ? AppSettings.systemLanguage : appLanguage
     }
 
-    /// Erste unterstützte Sprache aus den System-Spracheinstellungen, sonst Englisch.
+    /// First supported language from the system language settings, English otherwise.
     static var systemLanguage: String {
         let supported = ["en", "de", "es", "fr", "ru"]
         for lang in Locale.preferredLanguages {
@@ -268,9 +268,9 @@ final class AppSettings {
 
     var overlayStyle: OverlayStyle {
         get {
-            // Standard ist der monochrome Orb (Design-Sprache: monochrom + 1 Akzent).
+            // The default is the monochrome orb (design language: monochrome + 1 accent).
             let raw = d.string(forKey: "overlayStyle") ?? "orbMono"
-            // Migration: "pillSmall" heißt jetzt "pill", die alte große Pill entfällt.
+            // Migration: "pillSmall" is called "pill" now, the old large pill is gone.
             return OverlayStyle(rawValue: raw == "pillSmall" ? "pill" : raw) ?? .orbMono
         }
         set { d.set(newValue.rawValue, forKey: "overlayStyle") }
@@ -286,17 +286,17 @@ final class AppSettings {
         set { d.set(newValue, forKey: "modelPath") }
     }
 
-    /// Einmal ermittelt und dann gemerkt. Vorher lief bei JEDEM Zugriff eine
-    /// Ordnerprüfung, und der Getter steckt u. a. in `WhisperModel.localPath`,
-    /// das SwiftUI beim Zeichnen der Modell-Liste laufend aufruft. Dazu kam die
-    /// Migration von mehreren Queues gleichzeitig.
+    /// Determined once and then remembered. Before this a folder check ran on
+    /// EVERY access, and the getter sits in `WhisperModel.localPath` among other
+    /// places, which SwiftUI calls constantly while drawing the model list. On top
+    /// of that the migration ran from several queues at the same time.
     private static let resolvedAppSupportDir: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
             .first ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support", isDirectory: true)
         let dir = base.appendingPathComponent("Orbly", isDirectory: true)
-        // Einmalige Migration von der Zeit vor der Umbenennung (FlowWhisper -> Orbly):
-        // Modelle, Verlauf und Statistik einfach mitnehmen statt neu herunterladen.
+        // One-time migration from before the rename (FlowWhisper -> Orbly): simply
+        // take models, history and statistics along instead of downloading again.
         let legacy = base.appendingPathComponent("FlowWhisper", isDirectory: true)
         let fm = FileManager.default
         if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
@@ -315,11 +315,10 @@ final class AppSettings {
     var localURL: String { "http://127.0.0.1:\(localPort)/inference" }
     var activeEndpoint: String { mode == .local ? localURL : serverURL }
 
-    /// Löscht alles, was Orbly auf diesem Mac gespeichert hat: Verlauf,
-    /// Statistik, Log und alle Einstellungen. Modelle bleiben (bis 1,6 GB
-    /// Download) und werden separat gemeldet, damit niemand versehentlich
-    /// stundenlang neu herunterlädt.
-    /// Liefert zurück, wie viele Bytes die Modelle noch belegen.
+    /// Deletes everything Orbly stored on this Mac: history, statistics, log and
+    /// all settings. Models stay (up to 1.6 GB of download) and are reported
+    /// separately, so nobody accidentally re-downloads for hours.
+    /// Returns how many bytes the models still occupy.
     @discardableResult
     static func deleteAllData(includingModels: Bool) -> UInt64 {
         let fm = FileManager.default
@@ -337,14 +336,14 @@ final class AppSettings {
             .appendingPathComponent("Library/Logs/Orbly", isDirectory: true)
         try? fm.removeItem(at: log)
 
-        // Einstellungen inklusive der alten FlowWhisper-Domain.
+        // Settings including the old FlowWhisper domain.
         for domain in ["com.louis.orbly", "com.louis.flowwhisper"] {
             UserDefaults.standard.removePersistentDomain(forName: domain)
         }
         Stats.invalidateCache()
-        // Marker neu setzen: Er wurde gerade mitgelöscht, und beim nächsten Start
-        // hätte die Migration die eben gelöschten Einstellungen aus der alten
-        // Plist zurückgeholt. „Alle Daten löschen" muss endgültig sein.
+        // Set the marker again: it was just deleted along with the rest, and on the
+        // next launch the migration would have pulled the settings we just deleted
+        // back out of the old plist. "Delete all data" has to be final.
         UserDefaults.standard.set(true, forKey: "migratedFromFlowWhisper")
         UserDefaults.standard.synchronize()
         return includingModels ? 0 : modelBytes
@@ -363,9 +362,9 @@ final class AppSettings {
         return total
     }
 
-    /// True, wenn die Adresse unverschlüsseltes http auf einen ANDEREN Rechner
-    /// ist. Loopback ist unkritisch (verlässt den Mac nicht), alles andere
-    /// überträgt die Aufnahme im Klartext.
+    /// True when the address is unencrypted http to ANOTHER machine. Loopback is
+    /// harmless (it never leaves the Mac), everything else transmits the recording
+    /// in the clear.
     static func isInsecureRemoteEndpoint(_ urlString: String) -> Bool {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespaces)),
               url.scheme?.lowercased() == "http",
@@ -374,8 +373,8 @@ final class AppSettings {
         return !lokal.contains(host)
     }
 
-    /// Alles, was den lokalen whisper-server betrifft. Ändert sich das nicht,
-    /// muss er auch nicht neu gestartet werden.
+    /// Everything that concerns the local whisper-server. If this does not change,
+    /// it does not need to be restarted either.
     var transcriptionSettingsFingerprint: String {
         "\(mode.rawValue)|\(modelPath)|\(localPort)|\(serverURL)"
     }
@@ -384,7 +383,7 @@ final class AppSettings {
         NotificationCenter.default.post(name: AppSettings.changedNotification, object: nil)
     }
 
-    /// Wird nach jedem gespeicherten Diktat gepostet, damit offene Fenster
-    /// (Übersicht, Verlauf) sich sofort aktualisieren statt erst beim Fokuswechsel.
+    /// Posted after every saved dictation, so open windows (overview, history)
+    /// refresh immediately instead of only when the focus changes.
     static let dictationRecordedNotification = Notification.Name("OrblyDictationRecorded")
 }

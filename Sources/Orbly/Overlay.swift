@@ -5,18 +5,18 @@ enum OverlayPhase: Equatable {
     case recording
     case processing
     case error(String)
-    /// Kurzer "App läuft"-Gruß direkt nach dem Start (Häkchen-Kapsel).
+    /// Short "the app is running" greeting right after launch (check mark capsule).
     case ready
-    /// Freundlicher Hinweis statt Fehler, z. B. "bitte noch einmal drücken"
-    /// nach einem Aufwachdruck (siehe `WakeUpPress`).
+    /// A friendly note instead of an error, for example "please press again" after
+    /// a wake-up press (see `WakeUpPress`).
     case hint(String, symbol: String)
 }
 
 enum OverlayStyle: String, CaseIterable {
-    case pill        // kleine Glas-Kapsel
-    case minimal     // 21st.dev "AI Voice Input": Timer, feine Balken, Caption
-    case orb         // 21st.dev "Voice Powered Orb": leuchtende Kugel, reagiert auf Stimme
-    case orbMono     // derselbe Orb, aber monochrom (schwarz-weiß)
+    case pill        // small glass capsule
+    case minimal     // 21st.dev "AI Voice Input": timer, fine bars, caption
+    case orb         // 21st.dev "Voice Powered Orb": glowing sphere, reacts to the voice
+    case orbMono     // the same orb, but monochrome (black and white)
 
     var size: CGSize {
         switch self {
@@ -35,7 +35,7 @@ enum OverlayStyle: String, CaseIterable {
     }
 }
 
-/// Wo das Overlay auf dem Bildschirm erscheint.
+/// Where the overlay appears on screen.
 enum OverlayPosition: String, CaseIterable {
     case bottomCenter
     case bottomLeft
@@ -59,10 +59,10 @@ final class OverlayState: ObservableObject {
     @Published var phase: OverlayPhase = .recording
     @Published var style: OverlayStyle = .pill
     @Published var startDate = Date()
-    /// Steuert u. a. das Pausieren des Metal-Renderings, wenn das Panel weg ist.
+    /// Among other things this controls pausing the Metal rendering when the panel is gone.
     @Published var overlayVisible = false
-    /// Lokaler Server lädt gerade das Modell (Kaltstart nach Idle-Abschaltung) -
-    /// das Overlay pulsiert dann sanft.
+    /// The local server is loading the model right now (cold start after an idle
+    /// shutdown), and the overlay pulses gently then.
     @Published var serverStarting = false
 
     func push(level: Float) {
@@ -79,13 +79,13 @@ final class OverlayState: ObservableObject {
     }
 }
 
-/// Merkt sich für diese Sitzung, dass der Orb-Stil nicht darstellbar ist (kein
-/// Metal-Gerät, Shader lässt sich nicht kompilieren). Nur im Speicher, damit die
-/// gespeicherte Wahl des Nutzers unangetastet bleibt.
+/// Remembers for this session that the orb style cannot be drawn (no Metal
+/// device, the shader does not compile). In memory only, so the user's stored
+/// choice stays untouched.
 enum OverlayStyleFallback {
     static var orbUnavailable = false
 
-    /// Der Stil, der wirklich gezeichnet werden kann.
+    /// The style that can really be drawn.
     static func effective(_ style: OverlayStyle) -> OverlayStyle {
         guard orbUnavailable else { return style }
         return style == .orb || style == .orbMono ? .pill : style
@@ -95,7 +95,7 @@ enum OverlayStyleFallback {
 final class OverlayController {
     private let state = OverlayState()
     private var hideTimer: Timer?
-    /// Entwertet laufende Fade-outs, wenn das Overlay währenddessen neu gezeigt wird.
+    /// Invalidates running fade-outs when the overlay is shown again meanwhile.
     private var hideGeneration = 0
 
     private lazy var panel: NSPanel = {
@@ -121,7 +121,7 @@ final class OverlayController {
         state.reset(style: OverlayStyleFallback.effective(AppSettings.shared.overlayStyle))
         state.overlayVisible = true
         resizeAndPosition(state.style.size)
-        // Kurz einblenden statt hart aufpoppen (kurz genug, um sofort zu wirken).
+        // Fade in briefly instead of popping up hard (short enough to feel instant).
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
@@ -140,14 +140,14 @@ final class OverlayController {
         state.phase = .processing
     }
 
-    /// Sanftes Pulsieren, solange der lokale Server (Modell) noch hochfährt.
+    /// Gentle pulsing while the local server (the model) is still starting up.
     func setServerStarting(_ starting: Bool) {
         guard state.serverStarting != starting else { return }
         state.serverStarting = starting
     }
 
-    /// Kurzer Hinweis in derselben Kapsel-Optik wie der Start-Gruß. Bewusst nicht
-    /// als Fehler dargestellt: Es ist nichts kaputt, es fehlt nur ein zweiter Druck.
+    /// A short note in the same capsule look as the startup greeting. Deliberately
+    /// not shown as an error: nothing is broken, only a second press is missing.
     func showHint(_ message: String, symbol: String = "hand.tap.fill") {
         hideTimer?.invalidate()
         hideGeneration += 1
@@ -179,8 +179,8 @@ final class OverlayController {
         }
     }
 
-    /// Zeigt beim App-Start kurz eine Häkchen-Kapsel ("Bereit"), damit sichtbar
-    /// ist, dass die App läuft - blendet ein, hält kurz, blendet wieder aus.
+    /// Shows a check mark capsule ("Ready") briefly at app start, so it is visible
+    /// that the app is running. Fades in, holds shortly, fades out again.
     func flashLaunched() {
         hideTimer?.invalidate()
         hideGeneration += 1
@@ -216,19 +216,19 @@ final class OverlayController {
         })
     }
 
-    /// Die Kapsel wächst mit dem Text, das Panel dahinter muss mitwachsen -
-    /// sonst schneidet `lineLimit(1)` längere Hinweise ab.
+    /// The capsule grows with the text, so the panel behind it has to grow along,
+    /// otherwise `lineLimit(1)` cuts longer notes off.
     private static func hintWidth(for message: String) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 12, weight: .medium)
         let text = (message as NSString).size(withAttributes: [.font: font]).width
-        // Symbol, Innenabstände der Kapsel und etwas Luft fürs Panel.
+        // Symbol, the capsule's padding and a bit of air for the panel.
         return min(max(text + 90, 200), 620)
     }
 
-    /// Der Bildschirm, auf dem der Nutzer gerade arbeitet. Nicht `NSScreen.main`:
-    /// das ist "der Bildschirm mit dem Key-Window", und ein nonactivating panel
-    /// bekommt nie eins. Ohne Key-Window fällt macOS auf den Menüleisten-Bildschirm
-    /// zurück, das Overlay erschien dann am Zweitmonitor auf dem falschen Schirm.
+    /// The screen the user is working on. Not `NSScreen.main`: that is "the screen
+    /// with the key window", and a nonactivating panel never gets one. Without a
+    /// key window macOS falls back to the menu bar screen, so on a second monitor
+    /// the overlay appeared on the wrong one.
     private static var activeScreen: NSScreen? {
         let mouse = NSEvent.mouseLocation
         return NSScreen.screens.first { $0.frame.contains(mouse) }
@@ -272,11 +272,11 @@ struct OverlayRootView: View {
 
     var body: some View {
         Group {
-            // Nichts zeichnen, solange das Panel weg ist. `orderOut` allein
-            // genügt nicht: AppKit bedient ein verstecktes Fenster weiter im
-            // Display-Zyklus, und `hide()` lässt `phase` auf `.processing`
-            // stehen. Die Punkte-Animation lief dadurch unsichtbar mit 60 fps
-            // bis zum Beenden der App weiter (gemessen: 13 % CPU im Leerlauf).
+            // Draw nothing while the panel is gone. `orderOut` alone is not
+            // enough: AppKit keeps serving a hidden window in the display
+            // cycle, and `hide()` leaves `phase` at `.processing`. The dots
+            // animation therefore kept running invisibly at 60 fps until the
+            // app quit (measured: 13 % CPU while idle).
             if state.overlayVisible {
                 if case .error(let msg) = state.phase {
                     ErrorView(message: msg)
@@ -298,8 +298,8 @@ struct OverlayRootView: View {
     }
 }
 
-/// Weiches Ein-/Aus-Faden (Atmen), solange der lokale Whisper-Server nach einer
-/// Idle-Abschaltung neu hochfährt - der Nutzer sieht so: "da startet gerade was".
+/// Soft fading in and out (breathing) while the local Whisper server starts up
+/// again after an idle shutdown, so the user sees that something is starting.
 private struct ServerStartingPulse: ViewModifier {
     let active: Bool
     @State private var dimmed = false
@@ -319,10 +319,10 @@ private struct ServerStartingPulse: ViewModifier {
     }
 }
 
-// MARK: - Kurzmeldungen (Start-Gruß, Hinweis)
+// MARK: - Short messages (startup greeting, note)
 
-/// Glas-Kapsel mit Symbol und einer Zeile Text. Wächst mit dem Text, deshalb
-/// darf das Panel dahinter ruhig breiter sein als die Meldung.
+/// Glass capsule with a symbol and one line of text. It grows with the text,
+/// so the panel behind it may well be wider than the message.
 struct CapsuleBadge: View {
     let symbol: String
     let text: String
@@ -361,8 +361,8 @@ struct ReadyFlashView: View {
     }
 }
 
-/// Kurzer Hinweis, z. B. nach einem Aufwachdruck oder wenn der Text nicht
-/// eingefügt werden konnte. Absichtlich dieselbe ruhige Optik wie der Start-Gruß.
+/// A short note, for example after a wake-up press or when the text could not
+/// be pasted. Deliberately the same calm look as the startup greeting.
 struct HintFlashView: View {
     let message: String
     var symbol: String = "hand.tap.fill"
@@ -372,7 +372,7 @@ struct HintFlashView: View {
     }
 }
 
-// MARK: - Pill style (Kapsel mit Rahmen)
+// MARK: - Pill style (capsule with a border)
 
 struct PillView: View {
     @ObservedObject var state: OverlayState
@@ -381,7 +381,7 @@ struct PillView: View {
 
     var body: some View {
         ZStack {
-            // Glas-Kapsel: Blur + dunkler Schleier + heller Verlaufs-Rand
+            // Glass capsule: blur + dark veil + bright gradient border
             Capsule()
                 .fill(.ultraThinMaterial)
             Capsule()
@@ -395,9 +395,9 @@ struct PillView: View {
                     lineWidth: 1
                 )
 
-            // Beide Zustände liegen übereinander und werden ineinander geblendet
-            // (Balken sacken zur Linie zusammen, Punkte wachsen heraus). Ein
-            // hartes Austauschen der Views wirkte an dieser Stelle abgehackt.
+            // Both states lie on top of each other and cross-fade (the bars
+            // collapse into the line, the dots grow out of it). Swapping the
+            // views hard looked choppy in this spot.
             ZStack {
                 waveform
                     .opacity(processing ? 0 : 1)
@@ -432,7 +432,7 @@ struct PillView: View {
     }
 }
 
-// MARK: - Minimal style (nach 21st.dev "AI Voice Input")
+// MARK: - Minimal style (after 21st.dev "AI Voice Input")
 
 struct MinimalView: View {
     @ObservedObject var state: OverlayState
@@ -472,10 +472,10 @@ struct MinimalView: View {
     }
 
     private func barHeight(level: Float, index: Int) -> CGFloat {
-        // leichte Pseudo-Zufalls-Variation pro Balken wie in der Vorlage.
-        // Typen bewusst explizit: Ohne CGFloat-Umwandlung mischt der Ausdruck
-        // Double und CGFloat, was manche Swift-Versionen als "ambiguous use of
-        // operator '*'" ablehnen (in der CI aufgefallen).
+        // slight pseudo-random variation per bar, as in the original.
+        // The types are explicit on purpose: without the CGFloat conversion the
+        // expression mixes Double and CGFloat, which some Swift versions reject
+        // as "ambiguous use of operator '*'" (it showed up in CI).
         let jitter = CGFloat(0.6 + 0.4 * abs(sin(Double(index) * 1.7)))
         return 2.5 + CGFloat(min(max(level, 0), 1)) * 15 * jitter
     }
@@ -499,7 +499,7 @@ struct SpinningSquareView: View {
     }
 }
 
-// MARK: - Orb style (nach 21st.dev "Voice Powered Orb", Original-Shader via Metal)
+// MARK: - Orb style (after 21st.dev "Voice Powered Orb", original shader via Metal)
 
 struct OrbView: View {
     @ObservedObject var state: OverlayState
@@ -529,14 +529,14 @@ struct ErrorView: View {
     }
 }
 
-/// Drei Punkte als laufende Welle. Die Bewegung kommt aus der Bildschirmzeit
-/// (TimelineView), nicht aus `repeatForever` mit Delay - dadurch gibt es beim
-/// Ein- und Ausblenden keinen Sprung, und die Welle läuft gleichmäßig weiter.
+/// Three dots as a travelling wave. The motion comes from screen time
+/// (TimelineView), not from `repeatForever` with a delay, so there is no jump
+/// when fading in and out and the wave keeps running evenly.
 struct ProcessingDotsView: View {
     var color: Color = .white
     var dotSize: CGFloat = 5
     var spacing: CGFloat = 4
-    /// Pausiert die Zeitschleife, solange die Punkte nicht sichtbar sind.
+    /// Pauses the time loop while the dots are not visible.
     var active: Bool = true
 
     var body: some View {

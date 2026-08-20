@@ -1,129 +1,127 @@
 import XCTest
 @testable import Orbly
 
-/// Genau diese Fehlerklasse ist am 2026-08-03 aufgefallen: ein Schlüssel war auf
-/// Deutsch nie übersetzt („Listening …"). Ab jetzt fällt das im Test auf, nicht
-/// beim Nutzer.
+/// Exactly this class of bug showed up on 2026-08-03: one key was never
+/// translated into German ("Listening …"). From now on the test catches it,
+/// not the user.
 final class L10nTests: XCTestCase {
 
-    private let sprachen = ["en", "de", "es", "fr", "ru"]
+    private let languages = ["en", "de", "es", "fr", "ru"]
 
-    private func tabelle(_ lang: String) throws -> [String: String] {
-        try XCTUnwrap(L10n.tables[lang], "Sprachtabelle \(lang) fehlt komplett")
+    private func table(_ lang: String) throws -> [String: String] {
+        try XCTUnwrap(L10n.tables[lang], "the language table \(lang) is missing entirely")
     }
 
-    func testAlleFuenfSprachenExistieren() {
-        XCTAssertEqual(Set(L10n.tables.keys), Set(sprachen))
+    func testAllFiveLanguagesExist() {
+        XCTAssertEqual(Set(L10n.tables.keys), Set(languages))
     }
 
-    func testJedeSpracheHatDieselbenSchluessel() throws {
-        let referenz = Set(try tabelle("en").keys)
-        for lang in sprachen where lang != "en" {
-            let keys = Set(try tabelle(lang).keys)
+    func testEveryLanguageHasTheSameKeys() throws {
+        let reference = Set(try table("en").keys)
+        for lang in languages where lang != "en" {
+            let keys = Set(try table(lang).keys)
             XCTAssertTrue(
-                referenz.subtracting(keys).isEmpty,
-                "In \(lang) fehlen: \(referenz.subtracting(keys).sorted())"
+                reference.subtracting(keys).isEmpty,
+                "missing in \(lang): \(reference.subtracting(keys).sorted())"
             )
             XCTAssertTrue(
-                keys.subtracting(referenz).isEmpty,
-                "In \(lang) stehen Schlüssel, die es auf Englisch nicht gibt: \(keys.subtracting(referenz).sorted())"
+                keys.subtracting(reference).isEmpty,
+                "\(lang) has keys that do not exist in English: \(keys.subtracting(reference).sorted())"
             )
         }
     }
 
-    /// Ein abweichender Platzhalter formatiert zur Laufzeit falsch oder stürzt ab.
-    func testPlatzhalterStimmenUeberein() throws {
-        let en = try tabelle("en")
-        for lang in sprachen where lang != "en" {
-            let tabelle = try self.tabelle(lang)
-            for (key, englisch) in en {
-                guard let uebersetzt = tabelle[key] else { continue }
+    /// A differing placeholder formats wrongly at runtime, or crashes.
+    func testPlaceholdersMatch() throws {
+        let en = try table("en")
+        for lang in languages where lang != "en" {
+            let table = try self.table(lang)
+            for (key, english) in en {
+                guard let translated = table[key] else { continue }
                 XCTAssertEqual(
-                    Self.platzhalter(englisch), Self.platzhalter(uebersetzt),
-                    "Platzhalter weichen ab bei \(lang) / \(key)"
+                    Self.placeholders(english), Self.placeholders(translated),
+                    "placeholders differ at \(lang) / \(key)"
                 )
             }
         }
     }
 
-    /// Kein Wert darf leer sein - eine leere Zeichenkette sieht in der UI wie ein
-    /// Fehler aus.
-    func testKeineLeerenWerte() throws {
-        for lang in sprachen {
-            for (key, wert) in try tabelle(lang) {
+    /// No value may be empty. An empty string looks like a bug in the UI.
+    func testNoEmptyValues() throws {
+        for lang in languages {
+            for (key, value) in try table(lang) {
                 XCTAssertFalse(
-                    wert.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                    "Leerer Text bei \(lang) / \(key)"
+                    value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    "empty text at \(lang) / \(key)"
                 )
             }
         }
     }
 
-    /// Schreibstil-Regel des Projekts: keine Gedankenstriche als Satzzeichen.
-    /// Bindestriche in zusammengesetzten Wörtern sind erlaubt, deshalb wird nur
-    /// auf – und — geprüft.
-    func testKeineGedankenstriche() throws {
-        for lang in sprachen {
-            for (key, wert) in try tabelle(lang) {
+    /// Writing rule of the project: no en or em dashes as punctuation. Hyphens in
+    /// compound words are allowed, so only – and — are checked.
+    func testNoDashes() throws {
+        for lang in languages {
+            for (key, value) in try table(lang) {
                 XCTAssertFalse(
-                    wert.contains("—"),
-                    "Geviertstrich bei \(lang) / \(key): \(wert)"
+                    value.contains("—"),
+                    "em dash at \(lang) / \(key): \(value)"
                 )
                 XCTAssertFalse(
-                    wert.contains("–"),
-                    "Halbgeviertstrich bei \(lang) / \(key): \(wert)"
+                    value.contains("–"),
+                    "en dash at \(lang) / \(key): \(value)"
                 )
             }
         }
     }
 
-    /// Dieselbe Regel für den restlichen Quelltext, nicht nur für L10n.swift.
+    /// The same rule for the rest of the source, not just L10n.swift.
     ///
-    /// Vorher prüfte nur die Tabelle, und zwei Platzhalter für den RAM-Wert
-    /// (AppDelegate, Dashboard) sind so mit einem Halbgeviertstrich im Menü und
-    /// in der Seitenleiste gelandet.
-    func testKeineGedankenstricheImUebrigenQuelltext() throws {
-        // History.swift liest das alte Verlauf.md-Format, dessen Trennzeichen ein
-        // Halbgeviertstrich IST. Das ist ein Parser, keine neue Ausgabe.
-        let ausnahmen = ["History.swift"]
-        let quellen = URL(fileURLWithPath: #filePath)
+    /// Before this only the table was checked, and two placeholders for the RAM
+    /// value (AppDelegate, Dashboard) ended up with an en dash in the menu and in
+    /// the sidebar.
+    func testNoDashesInTheRestOfTheSource() throws {
+        // History.swift reads the old Verlauf.md format, whose separator IS an en
+        // dash. That is a parser, not new output.
+        let exceptions = ["History.swift"]
+        let sources = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // OrblyTests
             .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // Projektwurzel
+            .deletingLastPathComponent()   // project root
             .appendingPathComponent("Sources/Orbly")
 
-        let dateien = try FileManager.default
-            .contentsOfDirectory(at: quellen, includingPropertiesForKeys: nil)
+        let files = try FileManager.default
+            .contentsOfDirectory(at: sources, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "swift" }
-            .filter { !ausnahmen.contains($0.lastPathComponent) }
-        XCTAssertFalse(dateien.isEmpty, "Quelldateien nicht gefunden unter \(quellen.path)")
+            .filter { !exceptions.contains($0.lastPathComponent) }
+        XCTAssertFalse(files.isEmpty, "no source files found under \(sources.path)")
 
-        for datei in dateien {
-            let inhalt = try String(contentsOf: datei, encoding: .utf8)
-            for (nr, zeile) in inhalt.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-                // Kommentare erklären, sie erscheinen nicht in der Oberfläche.
-                let getrimmt = zeile.trimmingCharacters(in: .whitespaces)
-                guard !getrimmt.hasPrefix("//") else { continue }
+        for file in files {
+            let content = try String(contentsOf: file, encoding: .utf8)
+            for (no, line) in content.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+                // Comments explain things, they do not appear in the interface.
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.hasPrefix("//") else { continue }
                 XCTAssertFalse(
-                    zeile.contains("—") || zeile.contains("–"),
-                    "Gedankenstrich in \(datei.lastPathComponent):\(nr + 1): \(getrimmt)"
+                    line.contains("—") || line.contains("–"),
+                    "dash in \(file.lastPathComponent):\(no + 1): \(trimmed)"
                 )
             }
         }
     }
 
-    /// Fällt eine Übersetzung auf Englisch zurück, greift der Fallback und der
-    /// Nutzer sieht Englisch. Das darf nur bei Eigennamen passieren.
-    func testKeineUnuebersetztenSaetze() throws {
-        // Diese Schlüssel dürfen identisch mit dem Englischen sein: Lehnwörter
-        // und Fachbegriffe, die in der jeweiligen Sprache genauso geschrieben
-        // werden, sowie Formatstrings mit Einheitenkürzeln. Geprüft am
-        // 2026-08-03, einzeln nachgesehen. Wer hier etwas ergänzt, muss vorher
-        // wirklich nachschauen, ob es kein Übersetzungsloch ist.
-        // Absichtlich pro Sprache UND Schlüssel: Wäre die Ausnahme nur am
-        // Schlüssel festgemacht, würde ein echtes Übersetzungsloch in einer
-        // anderen Sprache mit durchrutschen.
-        let bekannteLehnwoerter: Set<String> = [
+    /// When a translation falls back to English, the fallback kicked in and the
+    /// user sees English. That may only happen for proper nouns.
+    func testNoUntranslatedSentences() throws {
+        // These keys may be identical to the English ones: loan words and
+        // technical terms that are spelled the same in that language, plus
+        // format strings with unit abbreviations. Checked on 2026-08-03, one
+        // by one. Whoever adds something here has to actually look it up and
+        // make sure it is not a missing translation.
+        // Deliberately per language AND key: if the exception hung off the key
+        // alone, a genuine missing translation in another language would slip
+        // through with it.
+        let knownLoanWords: Set<String> = [
             "de/settings.card.overlay", "es/settings.card.overlay", "fr/settings.card.overlay",
             "de/menu.ram", "es/menu.ram",
             "de/menu.ram.withServer",
@@ -132,36 +130,36 @@ final class L10nTests: XCTestCase {
             "de/settings.version", "fr/settings.version",
             "es/mode.local", "fr/mode.local",
             "es/settings.card.general",
-            "es/settings.overlayStyle.orbColor",   // „color" schreibt sich spanisch gleich
+            "es/settings.overlayStyle.orbColor",   // "color" is spelled the same in Spanish
             "es/stats.duration.hourMin", "fr/stats.duration.hourMin",
             "fr/settings.card.transcription",
             "fr/onboarding.permissions.mic",
         ]
-        let en = try tabelle("en")
+        let en = try table("en")
         for lang in ["de", "es", "fr"] {
-            let tabelle = try self.tabelle(lang)
-            for (key, englisch) in en {
-                guard !bekannteLehnwoerter.contains("\(lang)/\(key)") else { continue }
-                guard let uebersetzt = tabelle[key], uebersetzt == englisch else { continue }
-                // Sehr kurze Werte (Kürzel, Zahlen, Symbole) nicht bewerten.
-                let nurText = englisch
+            let table = try self.table(lang)
+            for (key, english) in en {
+                guard !knownLoanWords.contains("\(lang)/\(key)") else { continue }
+                guard let translated = table[key], translated == english else { continue }
+                // Do not judge very short values (abbreviations, numbers, symbols).
+                let textOnly = english
                     .replacingOccurrences(of: "%@", with: "")
                     .replacingOccurrences(of: "%d", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard nurText.count > 3 else { continue }
-                XCTFail("\(lang) / \(key) ist identisch mit Englisch: \"\(englisch)\"")
+                guard textOnly.count > 3 else { continue }
+                XCTFail("\(lang) / \(key) is identical to English: \"\(english)\"")
             }
         }
     }
 
-    /// Reihenfolge und Anzahl der Platzhalter einer Zeichenkette.
-    private static func platzhalter(_ text: String) -> [String] {
+    /// Order and number of the placeholders of a string.
+    private static func placeholders(_ text: String) -> [String] {
         var found: [String] = []
         var rest = Substring(text)
         while let idx = rest.firstIndex(of: "%") {
             let after = rest.index(after: idx)
             guard after < rest.endIndex else { break }
-            // %@, %d, %lld, %.1f ... bis zum Typ-Buchstaben lesen.
+            // %@, %d, %lld, %.1f ... read up to the type letter.
             var spec = "%"
             var cursor = after
             while cursor < rest.endIndex {

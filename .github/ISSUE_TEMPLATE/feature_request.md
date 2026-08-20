@@ -1,16 +1,16 @@
 ---
-name: Funktion vorschlagen
-about: Eine Idee für Orbly
+name: Suggest a feature
+about: An idea for Orbly
 labels: enhancement
 ---
 
-**Was möchtest du tun können?**
+**What would you like to be able to do?**
 
-**Warum? Was ist daran heute umständlich?**
+**Why? What is cumbersome about it today?**
 
-Beschreib gern die Situation, in der es dir gefehlt hat. Das hilft mehr als eine
-fertige Lösung, weil es oft einen einfacheren Weg gibt.
+Describe the situation where you missed it. That helps more than a finished
+solution, because there is often a simpler way.
 
-**Passt es zur Richtung des Projekts?**
-Orbly bleibt eine App, die lokal arbeitet: keine Konten, keine Cloud-Pflicht, keine
-Telemetrie, und im Diktat-Ablauf keine Dialoge.
+**Does it fit with the direction of the project?**
+Orbly stays an app that works locally: no accounts, no mandatory cloud, no
+telemetry, and no dialogs during a dictation.

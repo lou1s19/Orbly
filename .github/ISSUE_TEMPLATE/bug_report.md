@@ -1,26 +1,25 @@
 ---
-name: Fehler melden
-about: Etwas funktioniert nicht wie erwartet
+name: Report a bug
+about: Something does not work the way you expected
 labels: bug
 ---
 
-**Was passiert?**
+**What happens?**
 
-**Was hattest du erwartet?**
+**What did you expect?**
 
-**Schritte zum Nachstellen**
+**Steps to reproduce**
 1.
 2.
 3.
 
 **System**
-- macOS-Version:
-- Mac-Typ (Apple Silicon oder Intel):
-- Orbly-Version (Einstellungen, unten):
-- Modus: lokal / eigener Server
-- Whisper-Modell:
+- macOS version:
+- Mac type (Apple Silicon or Intel):
+- Orbly version (Settings, at the bottom):
+- Mode: local / own server
+- Whisper model:
 
 **Logs**
-Falls es um Aufnahme oder Transkription geht, hilft
-`~/Library/Logs/Orbly/whisper-server.log`. Bitte vorher durchsehen, es sollte nichts
-Persönliches darin stehen.
+If this is about recording or transcription, `~/Library/Logs/Orbly/whisper-server.log`
+helps. Please read through it first, there should be nothing personal in there.
