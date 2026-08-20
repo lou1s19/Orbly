@@ -38,6 +38,8 @@ All notable changes to Orbly. Newest first. This project follows
 - Key monitoring only runs during a dictation, not while you type elsewhere.
 - TLS is now required for model downloads and the update feed. Custom server
   addresses can still use plain HTTP for machines on your own network.
+- The DMG opens as an installer window that points from the app to the
+  Applications folder, instead of a plain folder with two icons in it.
 
 ### Added
 - Orbly tells you when the text could not be pasted anywhere, for example when
