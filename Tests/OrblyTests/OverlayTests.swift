@@ -8,57 +8,57 @@ final class OverlayTests: XCTestCase {
         super.tearDown()
     }
 
-    func testOhneMetalProblemBleibtDerStilWieGewaehlt() {
+    func testWithoutAMetalProblemTheStyleStaysAsChosen() {
         OverlayStyleFallback.orbUnavailable = false
         for style in OverlayStyle.allCases {
             XCTAssertEqual(OverlayStyleFallback.effective(style), style)
         }
     }
 
-    /// Ohne Metal-Gerät oder mit fehlgeschlagenem Shader bliebe das Overlay
-    /// unsichtbar - orbMono ist der Standardstil, die App wirkte dann tot.
-    func testOrbStileFallenAufPillZurueck() {
+    /// Without a Metal device, or with a failed shader, the overlay would stay
+    /// invisible. orbMono is the default style, so the app would look dead.
+    func testOrbStylesFallBackToPill() {
         OverlayStyleFallback.orbUnavailable = true
         XCTAssertEqual(OverlayStyleFallback.effective(.orb), .pill)
         XCTAssertEqual(OverlayStyleFallback.effective(.orbMono), .pill)
     }
 
-    func testReineSwiftUIStileBleibenUnangetastet() {
+    func testPlainSwiftUIStylesStayUntouched() {
         OverlayStyleFallback.orbUnavailable = true
         XCTAssertEqual(OverlayStyleFallback.effective(.pill), .pill)
         XCTAssertEqual(
             OverlayStyleFallback.effective(.minimal), .minimal,
-            "minimal ist reines SwiftUI und braucht keinen Rückfall"
+            "minimal is plain SwiftUI and needs no fallback"
         )
     }
 
-    func testJederStilHatGroesseUndBalkenzahl() {
+    func testEveryStyleHasASizeAndABarCount() {
         for style in OverlayStyle.allCases {
             XCTAssertGreaterThan(style.size.width, 0)
             XCTAssertGreaterThan(style.size.height, 0)
-            XCTAssertGreaterThan(style.barCount, 0, "Sonst wirft push(level:) ins Leere")
+            XCTAssertGreaterThan(style.barCount, 0, "otherwise push(level:) writes into the void")
         }
     }
 
-    /// `push` darf bei leerem Pegel-Array nicht abstürzen (removeFirst auf leer).
-    func testPushOhneVorherigesResetStuerztNicht() {
+    /// `push` must not crash on an empty level array (removeFirst on empty).
+    func testPushWithoutAPriorResetDoesNotCrash() {
         let state = OverlayState()
         state.push(level: 0.5)
         XCTAssertTrue(state.levels.isEmpty)
     }
 
-    func testResetFuelltPegelPassendZumStil() {
+    func testResetFillsLevelsToMatchTheStyle() {
         let state = OverlayState()
         state.reset(style: .minimal)
         XCTAssertEqual(state.levels.count, OverlayStyle.minimal.barCount)
         XCTAssertEqual(state.phase, .recording)
     }
 
-    func testPushHaeltDieLaengeKonstant() {
+    func testPushKeepsTheLengthConstant() {
         let state = OverlayState()
         state.reset(style: .pill)
-        let vorher = state.levels.count
+        let before = state.levels.count
         for _ in 0..<50 { state.push(level: 0.4) }
-        XCTAssertEqual(state.levels.count, vorher)
+        XCTAssertEqual(state.levels.count, before)
     }
 }

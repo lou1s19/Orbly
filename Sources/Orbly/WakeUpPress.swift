@@ -1,34 +1,34 @@
 import Foundation
 
-/// Erkennt den "Aufwachdruck": den ersten Fn-Druck nach längerer Pause, bei dem
+/// Detects the "wake-up press": the first Fn press after a longer pause, where
 /// scheinbar nichts passiert.
 ///
-/// Hintergrund: Liegt das letzte Diktat lange zurück, schläft die Audio-Hardware
-/// (und im lokalen Modus oft auch der whisper-server). Der Fn-Druck weckt beides
-/// auf, das Aufwecken blockiert aber den Start der Aufnahme. Wer Fn nur kurz
-/// antippt, hat dann losgelassen, bevor überhaupt Ton ankam - übrig bleibt eine
-/// Aufnahme unter der 0,3-s-Grenze, die bisher stillschweigend verworfen wurde.
-/// Für den Nutzer sah das aus wie "der erste Druck tut nichts, erst der zweite".
+/// Background: if the last dictation was a while ago, the audio hardware is
+/// asleep (and in local mode often the whisper-server too). The Fn press wakes
+/// both up, but waking blocks the start of the recording. Whoever only taps Fn
+/// briefly has let go before any audio arrived, which leaves a recording below
+/// the 0.3 s threshold that used to be discarded silently.
+/// To the user that looked like "the first press does nothing, only the second".
 ///
-/// Statt still zu verschwinden zeigt Orbly in diesem Fall einen kurzen Hinweis,
-/// dass es jetzt wach ist und man noch einmal drücken soll.
+/// Instead of vanishing silently, Orbly now shows a short note that it is awake
+/// and that you should press again.
 enum WakeUpPress {
-    /// Ab dieser Startdauer war die Audio-Hardware erkennbar eingeschlafen.
-    /// Warm liegt der Start deutlich darunter (wenige Millisekunden).
+    /// From this start duration on, the audio hardware was measurably asleep.
+    /// Warm, the start is far below that (a few milliseconds).
     static let warmupThreshold: TimeInterval = 0.2
 
-    /// Bewusst nur die gemessene Aufwachzeit der Audio-Hardware. Ein Kaltstart des
-    /// lokalen whisper-servers ist zwar auch ein Zeichen langer Pause, kostet aber
-    /// keine Aufnahme: Er läuft nebenher, während schon aufgenommen wird. Als
-    /// Auslöser genommen, würde er jeden versehentlichen Fn-Streifer nach einer
+    /// Deliberately only the measured wake-up time of the audio hardware. A cold
+    /// start of the local whisper-server is a sign of a long pause too, but it does
+    /// not cost a recording: it runs alongside while recording is already going. As
+    /// a trigger it would turn every accidental brush of the Fn key after a
     /// Pause zu einem Hinweis aufblasen.
     ///
     /// - Parameters:
-    ///   - recordingWasTooShort: Die Aufnahme hat die Mindestlänge nicht erreicht.
+    ///   - recordingWasTooShort: the recording did not reach the minimum length.
     ///   - audioWarmup: Dauer des letzten `AudioRecorder.start()`.
     static func shouldHint(recordingWasTooShort: Bool, audioWarmup: TimeInterval) -> Bool {
-        // Ein normaler Fehlgriff (Fn kurz gestreift) bleibt stumm wie bisher -
-        // ein Hinweis bei jedem versehentlichen Antippen wäre nur lästig.
+        // An ordinary misfire (Fn brushed briefly) stays silent as before. A note on
+        // every accidental tap would only be annoying.
         guard recordingWasTooShort else { return false }
         return audioWarmup >= warmupThreshold
     }

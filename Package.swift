@@ -15,9 +15,9 @@ let package = Package(
             ],
             path: "Sources/Orbly"
         ),
-        // Prüft die Logik, die man nicht durch Anklicken verifizieren kann:
-        // Segment-Zusammenbau von whisper, Statistik-Rechnung und Verdichtung,
-        // Gleichstand der 5 Sprachtabellen.
+        // Covers the logic that cannot be verified by clicking around:
+        // assembling whisper segments, the statistics maths and compaction,
+        // and parity of the 5 language tables.
         .testTarget(
             name: "OrblyTests",
             dependencies: ["Orbly"],

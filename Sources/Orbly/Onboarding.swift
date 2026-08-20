@@ -2,18 +2,18 @@ import AVFoundation
 import Combine
 import SwiftUI
 
-// MARK: - Zustand der Erst-Tour
+// MARK: - State of the first-run tour
 
 enum OnboardingStep: Int, CaseIterable {
     case welcome, permissions, engine, tryIt, done
 }
 
-/// Zustand der Erst-Tour.
+/// State of the first-run tour.
 ///
-/// Das Testdiktat läuft bewusst durch den normalen Diktat-Flow im AppDelegate
-/// (gleiche Zustandsmaschine, gleiches Overlay). Solange `captureActive` gesetzt
-/// ist, landet das Ergebnis hier im Fenster statt in der Ziel-App und wird weder
-/// in der Statistik noch im Verlauf gespeichert - es ist nur ein Test.
+/// The test dictation deliberately runs through the normal dictation flow in
+/// the AppDelegate (same state machine, same overlay). While `captureActive` is
+/// set, the result lands here in the window instead of in the target app and is
+/// stored neither in the statistics nor in the history. It is only a test.
 final class OnboardingModel: ObservableObject {
     enum Phase { case idle, recording, processing, done, failed }
 
@@ -25,7 +25,7 @@ final class OnboardingModel: ObservableObject {
     @Published var transcript = ""
     @Published var errorText = ""
 
-    /// Wird vom AppDelegate gesetzt, solange das Tour-Fenster offen ist.
+    /// Set by the AppDelegate while the tour window is open.
     var captureActive = false
 
     func reset() {
@@ -78,13 +78,13 @@ final class OnboardingModel: ObservableObject {
     }
 }
 
-// MARK: - Fenster
+// MARK: - Window
 
 struct OnboardingView: View {
     @ObservedObject var model: OnboardingModel
     let onFinish: () -> Void
 
-    /// Richtung der letzten Bewegung - die Seiten schieben sich passend hinein.
+    /// Direction of the last move, the pages slide in to match.
     @State private var forward = true
     @State private var arrowKeys: Any?
 
@@ -93,7 +93,7 @@ struct OnboardingView: View {
             NightSky()
 
             VStack(spacing: 0) {
-                // Platz für die Ampel-Buttons (Titelleiste ist transparent).
+                // Room for the traffic light buttons (the title bar is transparent).
                 Color.clear.frame(height: 28)
 
                 ZStack {
@@ -108,8 +108,8 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 52)
                 .id(model.step)
-                // Überblenden mit leichtem Versatz in Laufrichtung - die
-                // Bewegung soll den Wechsel andeuten, nicht das Auge führen.
+                // Cross-fade with a slight offset in the direction of travel: the
+                // motion should suggest the change, not lead the eye.
                 .transition(
                     .asymmetric(
                         insertion: .opacity.combined(with: .offset(x: forward ? 22 : -22)),
@@ -126,7 +126,7 @@ struct OnboardingView: View {
         .onDisappear { removeArrowKeys() }
     }
 
-    // MARK: Fußzeile
+    // MARK: Footer
 
     private var footer: some View {
         VStack(spacing: 12) {
@@ -184,14 +184,14 @@ struct OnboardingView: View {
         withAnimation(.easeInOut(duration: 0.32)) { model.step = next }
     }
 
-    /// Pfeiltasten wie in einer Präsentation. Der Monitor ist app-weit, deshalb
-    /// reagiert er nur auf Events aus dem Tour-Fenster (Kennung aus AppDelegate).
+    /// Arrow keys as in a presentation. The monitor is app-wide, so it only reacts
+    /// to events from the tour window (identified by a tag from the AppDelegate).
     private func installArrowKeys() {
         guard arrowKeys == nil else { return }
         arrowKeys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.window?.identifier?.rawValue == AppDelegate.onboardingWindowID else { return event }
-            // Steht der Cursor in einem Textfeld oder im markierbaren Diktat-Text,
-            // gehören die Pfeiltasten dorthin und nicht zur Seitennavigation.
+            // When the cursor sits in a text field or in the selectable dictation
+            // text, the arrow keys belong there and not to page navigation.
             if event.window?.firstResponder is NSTextView { return event }
             switch event.keyCode {
             case 123: move(by: -1); return nil
@@ -207,7 +207,7 @@ struct OnboardingView: View {
     }
 }
 
-// MARK: - 1. Willkommen
+// MARK: - 1. Welcome
 
 private struct WelcomeStep: View {
     var body: some View {
@@ -249,7 +249,7 @@ private struct WelcomeStep: View {
     }
 }
 
-// MARK: - 2. Berechtigungen
+// MARK: - 2. Permissions
 
 private struct PermissionsStep: View {
     @State private var micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -297,10 +297,10 @@ private struct PermissionsStep: View {
 
             Spacer(minLength: 0)
         }
-        // Kein Dauer-Timer: Erteilt wird in den Systemeinstellungen, also
-        // während Orbly im Hintergrund ist. Beim Zurückkommen nachlesen reicht
-        // und lief vorher nach dem Schließen der Tour ewig weiter.
-        // Der Mikrofon-Dialog aktualisiert sich über seinen eigenen Handler.
+        // No permanent timer: permission is granted in System Settings, so while
+        // Orbly is in the background. Reading it again on return is enough, and
+        // this used to keep running forever after the tour was closed.
+        // The microphone dialog refreshes through its own handler.
         .onAppear(perform: reloadPermissions)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             reloadPermissions()
@@ -345,8 +345,8 @@ private struct PermissionsStep: View {
     }
 
     private func requestMicrophone() {
-        // Nur beim ersten Mal darf macOS fragen; danach führt der Weg über die
-        // Systemeinstellungen - sonst passiert auf den Klick sichtbar nichts.
+        // macOS may only ask the first time. After that the path leads through
+        // System Settings, otherwise visibly nothing happens on the click.
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
             openPane("Privacy_Microphone")
             return
@@ -368,12 +368,12 @@ private struct PermissionsStep: View {
     }
 }
 
-// MARK: - 3. Sprache & Modell
+// MARK: - 3. Language and model
 
 private struct EngineStep: View {
     @ObservedObject private var manager = ModelManager.shared
     @State private var language = AppSettings.shared.language
-    /// Modell, das gerade für die Tour geladen wird (wird danach aktiviert).
+    /// The model currently being downloaded for the tour (activated afterwards).
     @State private var pendingID: String?
     @State private var copied = false
 
@@ -381,7 +381,7 @@ private struct EngineStep: View {
     private var engineMissing: Bool { LocalServerManager.findServerBinary() == nil }
     private static let installCommand = "brew install whisper-cpp"
 
-    /// Das aktive Modell, sofern es wirklich auf der Platte liegt.
+    /// The active model, provided it really is on disk.
     private var activeModel: WhisperModel? {
         ModelManager.all.first { manager.isSelected($0) && manager.isInstalled($0) }
     }
@@ -439,8 +439,8 @@ private struct EngineStep: View {
             Spacer(minLength: 0)
         }
         .onReceive(manager.$progress) { progress in
-            // Nach dem Download automatisch aktivieren - in der Tour will
-            // niemand danach noch in die Einstellungen wechseln.
+            // Activate automatically after the download: nobody wants to switch to
+            // the settings afterwards during the tour.
             guard let id = pendingID, progress[id] == nil,
                   let model = ModelManager.all.first(where: { $0.id == id }),
                   manager.isInstalled(model) else { return }
@@ -541,7 +541,7 @@ private struct EngineStep: View {
     }
 }
 
-// MARK: - 4. Ausprobieren (interaktives Testdiktat)
+// MARK: - 4. Try it out (interactive test dictation)
 
 private struct TryStep: View {
     @ObservedObject var model: OnboardingModel
@@ -575,8 +575,8 @@ private struct TryStep: View {
                 }
                 .frame(width: 300, alignment: .leading)
 
-                // Die Bühne wechselt zwischen Warten, Aufnahme, Verarbeitung und
-                // Ergebnis - jedes Mal überblenden statt hart austauschen.
+                // The stage switches between waiting, recording, processing and the
+                // result. Cross-fade every time instead of swapping hard.
                 ZStack {
                     stage
                         .id(model.phase)
@@ -617,8 +617,8 @@ private struct TryStep: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .processing:
             VStack(spacing: 18) {
-                // Dieselben Punkte wie im Overlay - die Tour zeigt genau das,
-                // was der Nutzer später beim Diktieren sieht.
+                // The same dots as in the overlay: the tour shows exactly what the
+                // user sees later while dictating.
                 ProcessingDotsView(color: .white, dotSize: 8, spacing: 7, active: true)
                 Text(L10n.t("onboarding.try.processing"))
                     .font(.system(size: 14))
@@ -656,8 +656,8 @@ private struct TryStep: View {
                 }
             }
 
-            // Scrollbar statt gekürzt: ein langes Diktat soll vollständig lesbar
-            // und kopierbar bleiben. Die Karte hat ohnehin feste Mindesthöhe.
+            // Scrollable instead of truncated: a long dictation should stay fully
+            // readable and copyable. The card has a fixed minimum height anyway.
             ScrollView(showsIndicators: false) {
                 Text(text)
                     .font(.system(size: 17))
@@ -678,7 +678,7 @@ private struct TryStep: View {
     }
 }
 
-/// Ruhezustand: pulsierende „fn"-Taste als Aufforderung.
+/// Resting state: a pulsing "fn" key as an invitation.
 private struct WaitingForFn: View {
     @State private var pulse = false
 
@@ -700,7 +700,7 @@ private struct WaitingForFn: View {
     }
 }
 
-/// Pegel-Balken wie im Overlay, nur größer.
+/// Level bars as in the overlay, only larger.
 private struct LevelBars: View {
     let levels: [Float]
 
@@ -717,14 +717,14 @@ private struct LevelBars: View {
     }
 }
 
-// MARK: - 5. Fertig
+// MARK: - 5. Done
 
 private struct DoneStep: View {
     @State private var launchAtLogin = LoginItem.isOn
     @State private var needsApproval = LoginItem.needsApproval
     @State private var failed = false
 
-    /// Siehe SettingsView: Setter nur bei echter Nutzer-Eingabe.
+    /// See SettingsView: setter only on real user input.
     private var launchBinding: Binding<Bool> {
         Binding(
             get: { launchAtLogin },
@@ -769,7 +769,7 @@ private struct DoneStep: View {
                         .font(.system(size: 15))
                         .foregroundStyle(OB.title)
                     Spacer(minLength: 12)
-                    // Beschriftung bleibt für VoiceOver erhalten, sichtbar steht sie links.
+                    // The label is kept for VoiceOver, visibly it sits on the left.
                     Toggle(L10n.t("onboarding.done.launch"), isOn: launchBinding)
                         .labelsHidden()
                         .toggleStyle(.switch)
@@ -792,8 +792,8 @@ private struct DoneStep: View {
 
             Spacer(minLength: 0)
         }
-        // Wer in den Systemeinstellungen bestätigt und zurückkommt, soll den
-        // Schalter richtig vorfinden - nicht erst nach einem Seitenwechsel.
+        // Whoever confirms in System Settings and comes back should find the
+        // switch in the right state, not only after changing page.
         .onAppear(perform: refresh)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refresh()

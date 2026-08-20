@@ -8,17 +8,17 @@ final class Transcriber {
         var errorDescription: String? { message }
     }
 
-    /// Laufender Upload (damit Esc ihn wirklich abbrechen kann) und die Nummer
-    /// des Diktats, zu dem er gehört.
+    /// The upload in flight (so Esc can really cancel it) and the number of the
+    /// dictation it belongs to.
     ///
-    /// Beides liegt hinter einer Sperre: Der erste Versuch wird vom Hauptthread
-    /// gestartet, ein Wiederholungsversuch aber von einer Hintergrund-Queue, und
-    /// `cancelCurrent()` kommt wieder vom Hauptthread. Ohne Sperre schrieben zwei
-    /// Threads gleichzeitig auf dieselbe Referenz, was abstürzen kann.
+    /// Both sit behind a lock: the first attempt is started from the main thread,
+    /// a retry from a background queue, and `cancelCurrent()` comes from the main
+    /// thread again. Without the lock two threads would write the same reference
+    /// at the same time, which can crash.
     ///
-    /// Ein Zähler statt eines Ja/Nein-Schalters, weil `transcribe()` den Schalter
-    /// zurücksetzte: Ein eingeplanter Wiederholungsversuch eines ABGEBROCHENEN
-    /// Diktats lief dadurch doch noch los und lud die Aufnahme hoch.
+    /// A counter instead of a yes/no flag, because `transcribe()` reset the flag:
+    /// a scheduled retry of a CANCELLED dictation therefore started after all and
+    /// uploaded the recording.
     private let lock = NSLock()
     private var currentTask: URLSessionUploadTask?
     private var generation = 0
@@ -34,9 +34,9 @@ final class Transcriber {
         return generation == self.generation
     }
 
-    /// Übernimmt die Task nur, wenn sie noch zum aktuellen Diktat gehört.
-    /// Liefert false, wenn inzwischen abgebrochen wurde - dann darf sie gar nicht
-    /// erst starten.
+    /// Only adopts the task while it still belongs to the current dictation.
+    /// Returns false when it was cancelled in the meantime, in which case it must
+    /// not start at all.
     private func adoptTask(_ task: URLSessionUploadTask, generation: Int) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard generation == self.generation else { return false }
@@ -44,7 +44,7 @@ final class Transcriber {
         return true
     }
 
-    /// Bricht eine laufende Transkription ab (Esc während der Verarbeitung).
+    /// Cancels a running transcription (Esc while processing).
     func cancelCurrent() {
         lock.lock()
         generation += 1
@@ -65,9 +65,9 @@ final class Transcriber {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        // Der Server antwortet erst, wenn er fertig ist - das ist also die Zeit,
-        // die er zum Transkribieren haben darf. Bei langen Aufnahmen (Obergrenze
-        // 10 Minuten) auf langsamer Hardware reichten 120 s nicht.
+        // The server only answers when it is done, so this is the time it is
+        // allowed to take for transcribing. For long recordings (10 minutes at
+        // most) on slow hardware, 120 s was not enough.
         request.timeoutInterval = 300
         let boundary = "Orbly-\(UUID().uuidString)"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -82,9 +82,9 @@ final class Transcriber {
         appendField("temperature", "0.0")
         appendField("temperature_inc", "0.2")
         appendField("response_format", "json")
-        // "auto" MUSS explizit gesendet werden - ohne language-Feld fällt
-        // whisper-server auf Englisch zurück statt die Sprache zu erkennen.
-        // Nur bei OpenAI-kompatiblen Servern (Modellname gesetzt) wird "auto" weggelassen.
+        // "auto" MUST be sent explicitly. Without a language field whisper-server
+        // falls back to English instead of detecting the language.
+        // Only OpenAI-compatible servers (model name set) omit "auto".
         if settings.language != "auto" {
             appendField("language", settings.language)
         } else if settings.serverModelName.isEmpty {
@@ -99,7 +99,7 @@ final class Transcriber {
             completion(.failure(TranscriptionError(message: L10n.t("transcriber.error.fileUnreadable"))))
             return
         }
-        // Audio steckt jetzt komplett im Request-Body - Tempdatei wird nicht mehr gebraucht.
+        // The audio now sits entirely in the request body, no temp file needed.
         try? FileManager.default.removeItem(at: wavURL)
 
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
@@ -108,8 +108,8 @@ final class Transcriber {
         body.append(audioData)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 
-        // Der lokale whisper-server braucht nach dem Start ein paar Sekunden zum
-        // Modell-Laden und nimmt so lange keine Verbindungen an -> kurz wiederholen.
+        // After starting, the local whisper-server needs a few seconds to load the
+        // model and accepts no connections until then -> retry briefly.
         let retries = settings.mode == .local ? 10 : 0
         send(request, body: body, retriesLeft: retries, generation: generation, completion: completion)
     }
@@ -121,7 +121,7 @@ final class Transcriber {
         let task = URLSession.shared.uploadTask(with: request, from: body) { [weak self] data, response, error in
             if let error {
                 let ns = error as NSError
-                // Vom Nutzer abgebrochen: keine Fehlermeldung, kein Retry.
+                // Cancelled by the user: no error message, no retry.
                 if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
                 let serverNotUpYet = ns.domain == NSURLErrorDomain
                     && (ns.code == NSURLErrorCannotConnectToHost || ns.code == NSURLErrorNetworkConnectionLost)
@@ -165,10 +165,10 @@ final class Transcriber {
             let text = Self.cleanup(rawText)
             DispatchQueue.main.async { completion(.success(text)) }
         }
-        // Zwischen dem Bauen der Task und `resume()` kann Esc dazwischenkommen.
-        // Ohne diese Prüfung lief der Upload trotzdem los, obwohl der Nutzer
-        // abgebrochen hat - im Servermodus wäre die Aufnahme dann doch aus dem
-        // Haus gegangen.
+        // Esc can land between building the task and `resume()`. Without this
+        // check the upload started anyway although the user cancelled, and in
+        // server mode the recording would have left the machine after all.
+        //
         guard adoptTask(task, generation: generation) else {
             task.cancel()
             return
@@ -178,14 +178,14 @@ final class Transcriber {
 
     /// Removes whisper artifacts like "[BLANK_AUDIO]", "(Musik)" on silence.
     ///
-    /// Aussortiert wird pro SEGMENT, nicht über den ganzen Text. Whisper schreibt
-    /// so einen Platzhalter immer als eigenes Segment, also als eigene Zeile.
+    /// Filtering happens per SEGMENT, not across the whole text. Whisper always
+    /// writes such a placeholder as its own segment, so as its own line.
     ///
-    /// Beide Nachbarlösungen wären falsch: Das frühere Muster verlangte, dass der
-    /// GESAMTE Text genau eine Klammergruppe ist, dann blieb bei Stille über mehr
-    /// als eine Segmentgrenze (ca. 30 s) "[BLANK_AUDIO] [BLANK_AUDIO]" im Text
-    /// stehen. Einfach jede Klammergruppe zu entfernen wäre auch falsch, dann
-    /// verlöre ein Diktat wie "Treffen (verschoben)" seinen Einschub.
+    /// Both neighbouring solutions would be wrong: the earlier pattern required
+    /// the WHOLE text to be exactly one bracket group, which left
+    /// "[BLANK_AUDIO] [BLANK_AUDIO]" in the text when the silence spanned more
+    /// than one segment boundary (about 30 s). Simply removing every bracket
+    /// group would be wrong too, a dictation like "meeting (moved)" would lose it.
     static func cleanup(_ raw: String) -> String {
         let artifactPattern = "^[\\[\\(][^\\]\\)]*[\\]\\)]$"
         let echteSegmente = raw
@@ -197,13 +197,13 @@ final class Transcriber {
         return joinSegments(echteSegmente.joined(separator: "\n"))
     }
 
-    /// whisper-server trennt Audio-Segmente per Zeilenumbruch - beim Diktieren
-    /// sind das keine gewollten Absätze, sie werden zu einer Zeile verbunden.
+    /// whisper-server separates audio segments with a line break. While dictating
+    /// those are not intended paragraphs, so they are joined into one line.
     ///
-    /// Ob an die Segmentgrenze ein Leerzeichen gehört, sagt das nächste Segment
-    /// selbst: Whispers Tokenizer stellt jedem Wortanfang ein Leerzeichen voran.
-    /// Fehlt es, wurde mitten im Wort getrennt (" ... der Ü" + "bergang wenn ...")
-    /// - dann darf kein Leerzeichen dazwischen, sonst entsteht "der Ü bergang".
+    /// Whether a space belongs at the segment boundary is told by the next segment
+    /// itself: whisper's tokenizer puts a space in front of every word start. If
+    /// it is missing, the split happened in the middle of a word (" ... the tra" +
+    /// "nsition when ..."), and then no space may go between them.
     static func joinSegments(_ raw: String) -> String {
         var text = ""
         for segment in raw.split(separator: "\n") {
@@ -213,7 +213,7 @@ final class Transcriber {
             if !text.isEmpty && startsNewWord { text += " " }
             text += piece
         }
-        // Innerhalb eines Segments können noch Whitespace-Folgen stehen.
+        // Inside a segment there can still be runs of whitespace.
         return text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 }

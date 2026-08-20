@@ -6,9 +6,9 @@ import Foundation
 final class AudioRecorder {
     var onLevel: ((Float) -> Void)?
 
-    /// Ergebnis von `stop()`. „Zu kurz" und „fehlgeschlagen" müssen sich
-    /// unterscheiden lassen: zu kurz wird still verworfen, ein Fehler muss
-    /// dem Nutzer gezeigt werden, sonst verschwindet sein Diktat kommentarlos.
+    /// Result of `stop()`. "Too short" and "failed" have to be distinguishable:
+    /// too short is discarded silently, an error has to be shown to the user,
+    /// otherwise their dictation disappears without a word.
     enum StopResult {
         case file(URL)
         case tooShort
@@ -16,14 +16,14 @@ final class AudioRecorder {
     }
 
     private let engine = AVAudioEngine()
-    /// Converter samt Eingabeformat, für das er gebaut wurde. Beides muss
-    /// zusammen ausgetauscht werden: `removeTap` wartet NICHT auf einen laufenden
-    /// Tap-Callback, ein Puffer im alten Format könnte sonst in den Converter des
-    /// neuen Geräts laufen (Apple wirft dabei eine nicht abfangbare Exception).
+    /// The converter together with the input format it was built for. Both have to
+    /// be swapped together: `removeTap` does NOT wait for a running tap callback,
+    /// so a buffer in the old format could otherwise reach the converter of the
+    /// new device (Apple throws an exception there that cannot be caught).
     private var _converter: (converter: AVAudioConverter, inputFormat: AVAudioFormat)?
-    /// `os_unfair_lock` statt `NSLock`: Der Tap-Callback liest das hier, und
-    /// os_unfair_lock kennt Priority Donation - eine kurz unterbrochene
-    /// Main-Thread-Sperre kostet so keinen Audio-Aussetzer.
+    /// `os_unfair_lock` instead of `NSLock`: the tap callback reads this, and
+    /// os_unfair_lock supports priority donation, so a briefly held main thread
+    /// lock does not cost an audio dropout.
     private var converterLock = os_unfair_lock_s()
 
     private func setConverter(_ value: (converter: AVAudioConverter, inputFormat: AVAudioFormat)?) {
@@ -32,7 +32,7 @@ final class AudioRecorder {
         os_unfair_lock_unlock(&converterLock)
     }
 
-    /// Liefert den Converter nur, wenn er zu diesem Pufferformat passt.
+    /// Only returns the converter when it matches this buffer format.
     private func converter(for format: AVAudioFormat) -> AVAudioConverter? {
         os_unfair_lock_lock(&converterLock)
         let current = _converter
@@ -46,21 +46,21 @@ final class AudioRecorder {
         commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true
     )!
     private(set) var isRecording = false
-    /// Dauer der letzten abgeschlossenen Aufnahme (aus der Sample-Zahl, für die Statistik).
+    /// Length of the last finished recording (from the sample count, for statistics).
     private(set) var lastDurationSeconds: Double = 0
-    /// Wie lange der letzte `start()` gebraucht hat. Nach längerer Pause schläft
-    /// die Audio-Hardware: Das Aufwecken blockiert hier spürbar, und genau diese
-    /// Zeit fehlt vorne in der Aufnahme. Der AppDelegate erkennt daran einen
-    /// "Aufwachdruck" und bittet den Nutzer, noch einmal zu drücken.
+    /// How long the last `start()` took. After a longer pause the audio hardware
+    /// is asleep: waking it up blocks noticeably here, and exactly that time is
+    /// missing from the front of the recording. The AppDelegate uses it to detect
+    /// a "wake-up press" and asks the user to press again.
     private(set) var lastStartWarmupSeconds: TimeInterval = 0
-    /// Gerätewechsel mitten in der Aufnahme, von dem sich die Engine nicht
-    /// erholen konnte (z. B. AirPods verbinden sich).
+    /// Device change in the middle of a recording that the engine could not
+    /// recover from (AirPods connecting, for example).
     private var engineBroken = false
 
     init() {
-        // Wechselt das Eingabegerät (AirPods, Dock, USB-Mikrofon), stoppt macOS
-        // die Engine und der Tap liefert nichts mehr. Ohne Reaktion läuft die
-        // Aufnahme scheinbar weiter und der Nutzer bekommt am Ende nichts.
+        // When the input device changes (AirPods, dock, USB microphone), macOS
+        // stops the engine and the tap delivers nothing any more. Without a
+        // reaction the recording seems to continue and the user gets nothing.
         NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
@@ -68,8 +68,8 @@ final class AudioRecorder {
         }
     }
 
-    /// Aufnahmen früherer Sitzungen aus dem Temp-Verzeichnis entfernen. Stirbt die
-    /// App mitten im Diktat, bleibt sonst rohe Sprachaufnahme liegen.
+    /// Remove recordings of earlier sessions from the temp directory. If the app
+    /// dies mid-dictation, raw speech would otherwise stay behind.
     static func sweepLeftoverRecordings() {
         let tmp = FileManager.default.temporaryDirectory
         DispatchQueue.global(qos: .utility).async {
@@ -100,9 +100,9 @@ final class AudioRecorder {
         guard !isRecording else { return }
         samplesQueue.sync { samples.removeAll() }
         engineBroken = false
-        // Ab hier wird gemessen: `inputNode`, `prepare()` und `start()` wecken
-        // zusammen die Audio-Hardware auf, das kann nach langer Pause über eine
-        // Sekunde dauern.
+        // Measuring starts here: `inputNode`, `prepare()` and `start()` together
+        // wake the audio hardware, which can take more than a second after a long
+        // pause.
         let warmupStart = Date()
         lastStartWarmupSeconds = 0
 
@@ -115,7 +115,7 @@ final class AudioRecorder {
         }
         guard let conv = AVAudioConverter(from: inputFormat, to: targetFormat) else {
             throw NSError(domain: "Orbly", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Audio-Format nicht nutzbar."
+                NSLocalizedDescriptionKey: "Audio format not usable."
             ])
         }
         setConverter((conv, inputFormat))
@@ -127,8 +127,8 @@ final class AudioRecorder {
         do {
             try engine.start()
         } catch {
-            // Tap muss wieder runter, sonst wirft der nächste installTap eine
-            // Objective-C-Exception ("tap already installed") und crasht die App.
+            // The tap has to come off again, otherwise the next installTap throws an
+            // Objective-C exception ("tap already installed") and crashes the app.
             input.removeTap(onBus: 0)
             setConverter(nil)
             throw error
@@ -140,11 +140,11 @@ final class AudioRecorder {
         isRecording = true
     }
 
-    /// True, wenn die letzte Aufnahme an einem Gerätewechsel abgeschnitten wurde
-    /// (AirPods verbinden sich mitten im Diktat). Nur der Teil davor ist drin.
+    /// True when the last recording was cut short by a device change (AirPods
+    /// connecting mid-dictation). Only the part before it is in there.
     private(set) var lastRecordingWasTruncated = false
 
-    /// Beendet die Aufnahme und liefert die WAV-Datei.
+    /// Stops the recording and returns the WAV file.
     @discardableResult
     func stop() -> StopResult {
         guard isRecording else { return .tooShort }
@@ -156,9 +156,9 @@ final class AudioRecorder {
         engineBroken = false
 
         var recorded: [Int16] = []
-        // Puffer gleich mit leeren: Sonst hielt die App die kompletten Audiodaten
-        // des letzten Diktats (1,9 MB je Minute) bis zum nächsten Fn-Druck, bei
-        // einer Menüleisten-App also potenziell stundenlang.
+        // Empty the buffer right away: otherwise the app held the complete audio
+        // data of the last dictation (1.9 MB per minute) until the next Fn press,
+        // so potentially for hours in a menu bar app.
         samplesQueue.sync {
             recorded = samples
             samples.removeAll(keepingCapacity: false)
@@ -166,15 +166,15 @@ final class AudioRecorder {
         lastDurationSeconds = Double(recorded.count) / targetFormat.sampleRate
         // Require at least 0.3 s of audio
         guard recorded.count > 4800 else {
-            // Gerätewechsel ohne brauchbares Audio: der Nutzer hat gesprochen,
-            // aufgenommen wurde nichts - das muss er erfahren.
+            // Device change without usable audio: the user spoke, nothing was
+            // recorded, and they have to be told.
             return broken ? .failed : .tooShort
         }
-        // Es wird nur der Teil VOR dem Gerätewechsel transkribiert. Das muss der
-        // Nutzer erfahren, sonst fehlt ihm die halbe Aufnahme ohne jeden Hinweis.
+        // Only the part BEFORE the device change is transcribed. The user has to
+        // be told, otherwise half the recording is missing without any hint.
         lastRecordingWasTruncated = broken
         if broken {
-            NSLog("Orbly: Eingabegerät wechselte während der Aufnahme - transkribiere den Teil davor")
+            NSLog("Orbly: input device changed during the recording, transcribing the part before it")
         }
 
         let url = FileManager.default.temporaryDirectory
@@ -184,15 +184,15 @@ final class AudioRecorder {
             return .file(url)
         } catch {
             NSLog("Orbly: WAV write failed: \(error)")
-            // Rohe Sprachaufnahme darf auch als Bruchstück nicht liegen bleiben.
+            // Raw speech must not stay behind, not even as a fragment.
             try? FileManager.default.removeItem(at: url)
             return .failed
         }
     }
 
-    /// Eingabegerät hat gewechselt: Tap und Converter auf das neue Format
-    /// umstellen und die Engine wieder starten. Die bisherigen Samples bleiben,
-    /// damit der Anfang des Diktats nicht verloren geht.
+    /// The input device changed: point the tap and the converter at the new
+    /// format and start the engine again. The samples so far are kept, so the
+    /// beginning of the dictation is not lost.
     private func handleConfigurationChange() {
         guard isRecording else { return }
         let input = engine.inputNode
@@ -201,7 +201,7 @@ final class AudioRecorder {
         guard format.sampleRate > 0, format.channelCount > 0,
               let conv = AVAudioConverter(from: format, to: targetFormat) else {
             engineBroken = true
-            NSLog("Orbly: Eingabegerät gewechselt, kein nutzbares Format mehr")
+            NSLog("Orbly: input device changed, no usable format left")
             return
         }
         setConverter((conv, format))
@@ -211,12 +211,12 @@ final class AudioRecorder {
         engine.prepare()
         do {
             try engine.start()
-            NSLog("Orbly: Aufnahme nach Gerätewechsel fortgesetzt")
+            NSLog("Orbly: recording resumed after the device change")
         } catch {
             input.removeTap(onBus: 0)
             setConverter(nil)
             engineBroken = true
-            NSLog("Orbly: Aufnahme nach Gerätewechsel nicht fortsetzbar: \(error)")
+            NSLog("Orbly: cannot resume the recording after the device change: \(error)")
         }
     }
 
@@ -241,8 +241,8 @@ final class AudioRecorder {
         }
 
         // Convert to 16 kHz mono Int16
-        // Passt der Converter nicht zum Pufferformat, stammt der Puffer noch
-        // vom alten Gerät - verwerfen statt Formatkonflikt riskieren.
+        // If the converter does not match the buffer format, the buffer is still
+        // from the old device. Discard it instead of risking a format conflict.
         guard let converter = converter(for: buffer.format) else { return }
         let ratio = targetFormat.sampleRate / buffer.format.sampleRate
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
@@ -295,8 +295,8 @@ final class AudioRecorder {
         data.append("data".data(using: .ascii)!)
         data.append(le32(dataSize))
         samples.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
-        // Atomar: Scheitert das Schreiben (Platte voll), bleibt sonst eine halbe
-        // Sprachaufnahme im Temp-Ordner liegen, die niemand mehr löscht.
+        // Atomic: if writing fails (disk full), half a speech recording would
+        // otherwise stay in the temp folder with nobody left to delete it.
         try data.write(to: url, options: .atomic)
     }
 }

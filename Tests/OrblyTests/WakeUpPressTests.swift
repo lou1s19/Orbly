@@ -1,34 +1,34 @@
 import XCTest
 @testable import Orbly
 
-/// Der erste Fn-Druck nach langer Pause schien nichts zu tun: Die Audio-Hardware
-/// wachte erst auf, die Aufnahme blieb unter der Mindestlänge und wurde still
-/// verworfen. Diese Tests halten fest, wann daraus ein Hinweis wird.
+/// The first Fn press after a long pause seemed to do nothing: the audio
+/// hardware woke up first, the recording stayed below the minimum length and
+/// was discarded silently. These tests pin down when that becomes a note.
 final class WakeUpPressTests: XCTestCase {
 
-    func testAufwachdruckMitLangsamerAudioHardwareZeigtHinweis() {
+    func testWakeUpPressWithSlowAudioHardwareShowsNote() {
         XCTAssertTrue(
             WakeUpPress.shouldHint(recordingWasTooShort: true, audioWarmup: 1.2)
         )
     }
 
-    /// Fn nur gestreift, alles war warm: bleibt stumm wie bisher, sonst blinkt
-    /// bei jedem Fehlgriff ein Hinweis auf.
-    func testKurzesVersehenBleibtStumm() {
+    /// Fn only brushed, everything warm: stays silent as before, otherwise a note
+    /// would flash up on every misfire.
+    func testShortMisfireStaysSilent() {
         XCTAssertFalse(
             WakeUpPress.shouldHint(recordingWasTooShort: true, audioWarmup: 0.01)
         )
     }
 
-    /// Ein Diktat, das trotz schlafender Hardware lang genug wurde, lief ja durch -
-    /// dafür gibt es keinen Grund zu meckern.
-    func testAusreichendLangeAufnahmeNieMitHinweis() {
+    /// A dictation that got long enough despite sleeping hardware did go through,
+    /// so there is no reason to complain about it.
+    func testLongEnoughRecordingNeverShowsNote() {
         XCTAssertFalse(
             WakeUpPress.shouldHint(recordingWasTooShort: false, audioWarmup: 2.0)
         )
     }
 
-    func testGenauAufDerSchwelleGiltAlsAufwachdruck() {
+    func testExactlyAtTheThresholdCountsAsAWakeUpPress() {
         XCTAssertTrue(
             WakeUpPress.shouldHint(
                 recordingWasTooShort: true, audioWarmup: WakeUpPress.warmupThreshold

@@ -4,16 +4,21 @@ models/*.bin
 .DS_Store
 *.wav
 
-# Secrets: nie ins Repo (Signier-Schlüssel liegen im Schlüsselbund)
+# Secrets: never in the repo (signing keys live in the keychain)
 .env
 .env.*
 *.p12
 *.pem
 sparkle_private_key*
 
-# Mitgelieferte Whisper-Engine: Binary, wird von
-# scripts/build-whisper-engine.sh erzeugt
+# Bundled Whisper engine: a binary, produced by
+# scripts/build-whisper-engine.sh
 vendor/
 
-# Repowise-Index (lokal, gehoert nicht ins Repo)
+# Local index, does not belong in the repo
 .repowise/
+
+# Local agent notes, not part of the project
+CLAUDE.md
+AGENTS.md
+.claude/

@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-// MARK: - Hauptfenster: Glas-Look, Hover-Sidebar links, Inhalt rechts
+// MARK: - Main window: glass look, hover sidebar on the left, content on the right
 
 enum MainTab: String, CaseIterable {
     case overview
@@ -37,7 +37,7 @@ final class MainWindowState: ObservableObject {
     @Published var tab: MainTab = .overview
 }
 
-/// Echter Hinter-Fenster-Blur (Glassmorphism-Basis).
+/// Real behind-window blur (the basis of the glass look).
 struct VisualEffect: NSViewRepresentable {
     var material: NSVisualEffectView.Material
 
@@ -56,10 +56,10 @@ struct VisualEffect: NSViewRepresentable {
 
 struct MainWindowView: View {
     @ObservedObject var state: MainWindowState
-    /// Liefert die PID des lokalen whisper-server, solange er läuft.
+    /// Returns the PID of the local whisper-server while it is running.
     let serverPid: () -> pid_t?
 
-    /// Sidebar klappt bei Hover auf (wie die Aceternity-Vorlage).
+    /// The sidebar expands on hover (like the Aceternity original).
     @State private var sidebarExpanded = false
 
     private let sidebarCollapsed: CGFloat = 64
@@ -78,7 +78,7 @@ struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Platz für die Ampel-Buttons (Titelleiste ist transparent)
+            // Room for the traffic light buttons (the title bar is transparent)
             Color.clear.frame(height: 44)
 
             HStack(spacing: 10) {
@@ -129,7 +129,7 @@ struct MainWindowView: View {
         }
     }
 
-    // MARK: Inhalt
+    // MARK: Content
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -186,7 +186,7 @@ struct MainWindowView: View {
     }
 }
 
-// MARK: - Sidebar-Navigation mit Hover-Animation
+// MARK: - Sidebar navigation with a hover animation
 
 private struct SidebarNavItem: View {
     let tab: MainTab
@@ -202,15 +202,15 @@ private struct SidebarNavItem: View {
                 Image(systemName: tab.icon)
                     .font(.system(size: 14, weight: selected ? .semibold : .regular))
                     .frame(width: 20)
-                // Eingeklappt den Text ganz weglassen - unsichtbar überstehende
-                // Labels ziehen sonst die Auswahl-Box bis an den Rand.
+                // While collapsed, leave the text out entirely: invisible labels
+                // sticking out would pull the selection box to the edge.
                 if expanded {
                     Text(tab.title)
                         .font(.callout.weight(selected ? .semibold : .regular))
                         .lineLimit(1)
                         .fixedSize()
-                        // Der kleine Versatz nach rechts beim Hovern ist das
-                        // "group-hover:translate-x-1" der Vorlage.
+                        // The small shift to the right on hover is the
+                        // "group-hover:translate-x-1" of the original.
                         .offset(x: hovered ? 3 : 0)
                         .transition(.opacity)
                     Spacer(minLength: 0)
@@ -229,8 +229,8 @@ private struct SidebarNavItem: View {
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        // Eingeklappt ist das der Standardzustand und der Text fehlt strukturell -
-        // ohne Label wären die drei Hauptknöpfe für VoiceOver namenlos.
+        // Collapsed is the default state and the text is structurally absent.
+        // Without a label the three main buttons would be nameless to VoiceOver.
         .accessibilityLabel(tab.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .onHover { h in
@@ -239,7 +239,7 @@ private struct SidebarNavItem: View {
     }
 }
 
-// MARK: - RAM-Anzeige (Sidebar-Fuß)
+// MARK: - RAM display (foot of the sidebar)
 
 private struct SidebarMemoryView: View {
     let serverPid: () -> pid_t?
@@ -265,8 +265,8 @@ private struct SidebarMemoryView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: expanded ? .leading : .center)
-            // Eingeklappt bleibt nur das Icon - die Zeilen ganz weglassen,
-            // sonst behält die Box ihre volle Höhe und sieht kaputt aus.
+            // Collapsed, only the icon is left. Leave the lines out entirely,
+            // otherwise the box keeps its full height and looks broken.
             if expanded {
                 row(L10n.t("dashboard.ram.app"), appMemory)
                 if AppSettings.shared.mode == .local {
@@ -291,24 +291,24 @@ private struct SidebarMemoryView: View {
                 .strokeBorder(Color.white.opacity(0.08))
         )
         .onAppear(perform: refresh)
-        // Beim Aufklappen sofort aktualisieren: Eingeklappt wird nicht gepollt,
-        // der Wert wäre sonst beliebig alt (z. B. ein Whisper-Wert für einen
-        // Server, den die Idle-Abschaltung längst beendet hat).
+        // Refresh immediately when expanding: while collapsed nothing is polled,
+        // so the value could be arbitrarily old (a Whisper value for a server
+        // the idle shutdown ended long ago, for example).
         .onChange(of: expanded) { _, nowExpanded in
             if nowExpanded { refresh() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            // Wie beim Timer unten: eingeklappt sind die Werte unsichtbar, und
-            // jedes refresh() startet einen echten /bin/ps-Prozess.
+            // As with the timer below: while collapsed the values are invisible, and
+            // every refresh() starts a real /bin/ps process.
             guard expanded else { return }
             refresh()
         }
         .onReceive(timer) { _ in
-            // Nicht im Hintergrund pollen - nur solange das Fenster wirklich vorne ist.
+            // Do not poll in the background, only while the window really is in front.
             guard NSApp.keyWindow != nil else { return }
-            // Eingeklappt sind die Werte gar nicht sichtbar. Jedes refresh()
-            // startet einen echten /bin/ps-Prozess, das wären 20 pro Minute
-            // für nichts.
+            // While collapsed the values are not visible at all. Every refresh()
+            // starts a real /bin/ps process, which would be 20 per minute for
+            // nothing.
             guard expanded else { return }
             refresh()
         }
@@ -341,7 +341,7 @@ private struct SidebarMemoryView: View {
     }
 }
 
-// MARK: - Glas-Karten-Optik (gemeinsam für alle Tabs)
+// MARK: - Glass card look (shared by all tabs)
 
 extension View {
     func cardStyle() -> some View {
@@ -364,11 +364,11 @@ extension View {
     }
 }
 
-// MARK: - Übersicht (Statistik)
+// MARK: - Overview (statistics)
 
 struct DashboardView: View {
     @State private var summary = StatsSummary()
-    /// Tag unter dem Mauszeiger im Chart (für Hover-Linie + Tooltip).
+    /// The day under the pointer in the chart (for the hover line and tooltip).
     @State private var hoveredDay: Date?
 
     var body: some View {
@@ -403,21 +403,21 @@ struct DashboardView: View {
             chartCard
         }
         .onAppear { reloadSummary(animated: false) }
-        // Das Fenster wird beim Schließen nur versteckt - beim Wiederöffnen
-        // feuert onAppear nicht, deshalb hier zusätzlich aktualisieren.
+        // The window is only hidden when closed. onAppear does not fire when it
+        // is reopened, so refresh here as well.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             reloadSummary(animated: true)
         }
-        // Diktiert der Nutzer, während dieses Fenster schon vorne ist, feuert
-        // kein Fokuswechsel - dann blieben die Zahlen stehen.
+        // If the user dictates while this window is already in front, no focus
+        // change fires and the numbers would stand still.
         .onReceive(NotificationCenter.default.publisher(for: AppSettings.dictationRecordedNotification)) { _ in
             reloadSummary(animated: true)
         }
     }
 
-    /// Auswertung läuft im Hintergrund - bei langer Nutzung hing das Fenster
-    /// sonst beim Öffnen, weil die ganze Statistikdatei auf dem Main-Thread
-    /// geparst wurde.
+    /// The evaluation runs in the background. With long use the window used to
+    /// hang when opening, because the whole statistics file was parsed on the
+    /// main thread.
     private func reloadSummary(animated: Bool) {
         Stats.summaryAsync { fresh in
             if animated {
@@ -511,13 +511,13 @@ struct DashboardView: View {
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let point):
-                                    // Kein Force-Unwrap: plotFrame ist nil, solange
-                                    // das Diagramm keine Plot-Flaeche hat (erster
-                                    // Layout-Durchlauf, Fenstergroesse 0).
+                                    // No force unwrap: plotFrame is nil while the
+                                    // chart has no plot area (first layout pass,
+                                    // window size 0).
                                     guard let plot = proxy.plotFrame else { return }
                                     let origin = geo[plot].origin
                                     if let date: Date = proxy.value(atX: point.x - origin.x) {
-                                        // +12h = zum NÄCHSTEN Tag runden statt abschneiden
+                                        // +12h = round to the NEXT day instead of truncating
                                         let day = Calendar.current.startOfDay(for: date.addingTimeInterval(12 * 3600))
                                         if hoveredDay != day {
                                             withAnimation(.easeOut(duration: 0.12)) { hoveredDay = day }
@@ -568,8 +568,8 @@ private struct StatCard: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    // Russisch und Französisch sind deutlich länger als Englisch -
-                    // ohne Skalierung stehen hier Auslassungspunkte.
+                    // Russian and French are noticeably longer than English. Without
+                    // scaling there would be an ellipsis here.
                     .minimumScaleFactor(0.75)
             }
             Text(value)
@@ -592,14 +592,14 @@ private struct StatCard: View {
     }
 }
 
-// MARK: - Verlauf
+// MARK: - History
 
 struct HistoryView: View {
-    /// Bewusst leer: Der Startwert eines @State wird bei JEDER Initialisierung
-    /// der View-Struct ausgewertet, auch wenn SwiftUI das Ergebnis gleich wieder
-    /// verwirft. Diese View wird bei jedem Überfahren der Seitenleiste neu
-    /// gebaut, und History.load() liest die ganze Datei synchron auf dem
-    /// Hauptthread. Gefüllt wird in onAppear.
+    /// Deliberately empty: the initial value of a @State is evaluated on EVERY
+    /// initialization of the view struct, even when SwiftUI throws the result away
+    /// again right after. This view is rebuilt every time the pointer crosses the
+    /// sidebar, and History.load() reads the whole file synchronously on the main
+    /// thread. It is filled in onAppear.
     @State private var entries: [HistoryEntry] = []
     @State private var copiedID: UUID?
     @State private var confirmClear = false
@@ -664,8 +664,8 @@ struct HistoryView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             entries = History.load()
         }
-        // Neues Diktat bei offenem Verlauf-Tab: sofort zeigen, nicht erst nach
-        // einem Fensterwechsel.
+        // A new dictation while the history tab is open: show it immediately, not
+        // only after a window change.
         .onReceive(NotificationCenter.default.publisher(for: AppSettings.dictationRecordedNotification)) { _ in
             entries = History.load()
         }

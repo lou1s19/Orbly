@@ -1,16 +1,16 @@
 import AppKit
 
-/// Macht laufende Musik-Apps beim Diktatstart leiser (Ducking) oder pausiert
-/// sie - je nach Setting `mediaDuringDictation` - und stellt danach alles
-/// wieder her.
+/// Turns running music apps down when a dictation starts (ducking) or pauses
+/// them, depending on the `mediaDuringDictation` setting, and restores
+/// everything afterwards.
 ///
-/// Steuerung per Apple Events über `osascript` als Kindprozess - NSAppleScript
-/// ist nicht threadsicher, und der einmalige macOS-Berechtigungsdialog
-/// ("Orbly möchte Musik steuern") darf den Main-Thread nicht blockieren.
+/// Controlled through Apple events via `osascript` as a child process:
+/// NSAppleScript is not thread safe, and the one-time macOS permission dialog
+/// ("Orbly wants to control Music") must not block the main thread.
 final class MediaController {
     private struct Player {
         let bundleID: String
-        /// Name im AppleScript-`tell` (nicht der Anzeigename).
+        /// Name used in the AppleScript `tell` (not the display name).
         let scriptName: String
     }
 
@@ -24,9 +24,9 @@ final class MediaController {
         Player(bundleID: "com.spotify.client", scriptName: "Spotify"),
     ]
 
-    /// Nur was WIR verändert haben, wird wiederhergestellt.
+    /// Only what WE changed gets restored.
     private var actions: [(player: Player, action: Action)] = []
-    /// Seriell: restore wartet damit automatisch, bis das Ducking fertig ist.
+    /// Serial: restore therefore waits automatically until ducking is done.
     private let queue = DispatchQueue(label: "Orbly.MediaController")
 
     func duckOrPausePlayers() {
@@ -38,15 +38,15 @@ final class MediaController {
                 guard Self.runScript("\(base) to player state as string") == "playing" else { continue }
                 switch mode {
                 case .pause:
-                    // Nur bei ERFOLGREICHEM Befehl merken - sonst würden wir eine
-                    // später vom Nutzer selbst pausierte App fälschlich wieder starten.
+                    // Only remember it on a SUCCESSFUL command, otherwise we would
+                    // wrongly restart an app the user paused themselves later.
                     if Self.runScript("\(base) to pause") != nil {
                         self.actions.append((player, .paused))
                     }
                 case .duck:
                     guard let volText = Self.runScript("\(base) to sound volume"),
                           let volume = Int(volText),
-                          volume > 10 else { continue } // schon leise -> nichts tun
+                          volume > 10 else { continue } // already quiet -> do nothing
                     let target = max(5, volume / 2)
                     if Self.runScript("\(base) to set sound volume to \(target)") != nil {
                         self.actions.append((player, .ducked(original: volume, ducked: target)))
@@ -62,27 +62,27 @@ final class MediaController {
         queue.async { self.restoreLocked() }
     }
 
-    /// Blockierende Variante für applicationWillTerminate - queue.async käme
-    /// vor dem Prozessende nicht mehr zum Zug.
+    /// Blocking variant for applicationWillTerminate: queue.async would not get
+    /// its turn before the process ends.
     func restorePlayersSync() {
         queue.sync { self.restoreLocked() }
     }
 
-    /// Nur auf `queue` aufrufen.
+    /// Only call this on `queue`.
     private func restoreLocked() {
         for (player, action) in actions where Self.isRunning(player.bundleID) {
             let base = "tell application \"\(player.scriptName)\""
             switch action {
             case .paused:
-                // Nur fortsetzen, wenn noch pausiert - hat der Nutzer inzwischen
-                // selbst eingegriffen (z. B. bewusst gestoppt), nicht überstimmen.
+                // Only resume when still paused. If the user has intervened in the
+                // meantime (deliberately stopped it), do not overrule them.
                 if Self.runScript("\(base) to player state as string") == "paused" {
                     Self.runScript("\(base) to play")
                 }
             case .ducked(let original, let ducked):
-                // Nur zurückdrehen, wenn die Lautstärke noch (ungefähr) unser
-                // Duck-Wert ist - Spotify rundet gesetzte Werte leicht, und
-                // manuelle Änderungen des Nutzers überstimmen wir nicht.
+                // Only turn it back up when the volume still is (roughly) our duck
+                // value. Spotify rounds values it is given slightly, and we do not
+                // overrule manual changes by the user.
                 if let volText = Self.runScript("\(base) to sound volume"),
                    let volume = Int(volText),
                    abs(volume - ducked) <= 5 {
@@ -97,7 +97,7 @@ final class MediaController {
         !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
     }
 
-    /// Führt AppleScript aus und liefert stdout (getrimmt), nil bei Fehler.
+    /// Runs AppleScript and returns stdout (trimmed), nil on error.
     @discardableResult
     private static func runScript(_ source: String) -> String? {
         let process = Process()
@@ -105,16 +105,16 @@ final class MediaController {
         process.arguments = ["-e", source]
         let pipe = Pipe()
         process.standardOutput = pipe
-        // nullDevice statt Pipe(): Eine Pipe, aus der niemand liest, läuft voll
-        // und blockiert dann den Kindprozess beim Schreiben.
+        // nullDevice instead of Pipe(): a pipe nobody reads from fills up and
+        // then blocks the child process on writing.
         process.standardError = FileHandle.nullDevice
         do {
             try process.run()
-            // Erst lesen, dann warten. Umgekehrt ist es die klassische
-            // Deadlock-Reihenfolge: Schreibt das Kind mehr als den Pipe-Puffer,
-            // wartet es aufs Leeren, während wir auf sein Ende warten. Diese
-            // serielle Queue stünde danach dauerhaft, die Musik käme nie zurück
-            // und das Beenden der App würde hängen.
+            // Read first, then wait. The other way round is the classic deadlock
+            // order: if the child writes more than the pipe buffer, it waits for
+            // the buffer to drain while we wait for it to exit. This serial queue
+            // would then stall for good, the music would never come back and
+            // quitting the app would hang.
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { return nil }

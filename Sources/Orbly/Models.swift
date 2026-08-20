@@ -1,35 +1,35 @@
 import CryptoKit
 import Foundation
 
-/// Kuratierte whisper.cpp-Modelle (GGML-Dateien von Hugging Face).
+/// Curated whisper.cpp models (GGML files from Hugging Face).
 ///
-/// Angeboten werden ausschließlich quantisierte Dateien (q5/q8): unter 1 % mehr
-/// Wortfehler als die f16-Originale, dafür 40-60 % weniger RAM. Die alten
-/// unquantisierten Modelle bleiben als `legacy` bestehen und werden angezeigt,
-/// solange sie installiert sind - sonst hätten Bestandsinstallationen plötzlich
-/// ein aktives Modell, das in der Liste gar nicht mehr auftaucht.
+/// Only quantized files are offered (q5/q8): under 1 % more word errors than
+/// the f16 originals, for 40 to 60 % less RAM. The old unquantized models stay
+/// around as `legacy` and are shown as long as they are installed, otherwise
+/// existing installations would suddenly have an active model that no longer
+/// appears in the list at all.
 struct WhisperModel: Identifiable {
     let id: String
-    /// Ohne Sprach-Präfix. Das kommt aus `language` und wird übersetzt, siehe
-    /// `displayName`.
+    /// Without a language prefix. That comes from `language` and is translated,
+    /// see `displayName`.
     let baseName: String
     let fileName: String
     let sizeMB: Int
-    /// L10n-Key für die Qualitäts-Kurzbeschreibung.
+    /// L10n key for the short quality description.
     let qualityKey: String
-    /// Hugging-Face-Repo der Datei - Sprachpakete liegen außerhalb von ggerganov.
+    /// Hugging Face repo of the file. Language packs live outside ggerganov.
     let repo: String
-    /// Fester Commit des Repos. `resolve/main` wäre eine bewegliche Referenz:
-    /// Der Inhalt hinter der URL könnte sich jederzeit ändern, und die Datei
-    /// wird anschließend von whisper.cpp im eigenen Prozess geparst.
+    /// Pinned commit of the repo. `resolve/main` would be a moving reference: the
+    /// content behind the URL could change at any time, and the file is then
+    /// parsed by whisper.cpp in its own process.
     let revision: String
-    /// Erwartete SHA-256 der Datei. Ohne sie wäre die einzige Prüfung die
-    /// 4-Byte-GGML-Kennung, und die erkennt nur HTML-Fehlerseiten.
+    /// Expected SHA-256 of the file. Without it the only check would be the 4 byte
+    /// GGML magic, which only catches HTML error pages.
     let sha256: String
-    /// ISO-Code, wenn das Modell auf EINE Sprache spezialisiert ist (Fine-Tune
-    /// oder `.en`-Variante). nil = mehrsprachig (99 Sprachen).
+    /// ISO code when the model is specialized on ONE language (a fine-tune or an
+    /// `.en` variant). nil = multilingual (99 languages).
     let language: String?
-    /// Nicht mehr aktiv angeboten - nur sichtbar, solange installiert.
+    /// No longer offered actively, only visible while installed.
     let legacy: Bool
 
     init(
@@ -50,12 +50,12 @@ struct WhisperModel: Identifiable {
         self.legacy = legacy
     }
 
-    /// Stand 2026-08-03 geprüft. Beim Aktualisieren die SHA-256 der betroffenen
-    /// Dateien mit erneuern, sonst schlägt der Download fehl (das ist Absicht).
+    /// Checked as of 2026-08-03. When updating these, renew the SHA-256 of the
+    /// affected files as well, otherwise the download fails (which is intended).
     static let whisperCppRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
 
-    /// „Deutsch: Large v3 Turbo". Der Sprachname wurde vorher hart auf Deutsch
-    /// bzw. Englisch geschrieben, ein französischer Nutzer las also „Deutsch:".
+    /// "German: Large v3 Turbo". The language name used to be hardwired to German
+    /// or English, so a French user read "Deutsch:".
     var displayName: String {
         guard let language else { return baseName }
         return "\(L10n.t("model.language.\(language)")): \(baseName)"
@@ -70,11 +70,11 @@ struct WhisperModel: Identifiable {
     }
 }
 
-/// Lädt, verwaltet und aktiviert Whisper-Modelle für den lokalen Modus.
+/// Downloads, manages and activates Whisper models for local mode.
 final class ModelManager: NSObject, ObservableObject {
     static let shared = ModelManager()
 
-    /// Mehrsprachige Modelle (99 Sprachen), aufsteigend nach RAM-Bedarf.
+    /// Multilingual models (99 languages), ascending by memory footprint.
     static let multilingual: [WhisperModel] = [
         WhisperModel(
             id: "tiny-q5_1", displayName: "Tiny", fileName: "ggml-tiny-q5_1.bin",
@@ -105,11 +105,11 @@ final class ModelManager: NSObject, ObservableObject {
         ),
     ]
 
-    /// Auf eine Sprache spezialisierte Modelle. Sie schlagen die mehrsprachigen
-    /// Modelle bei ihrer Sprache deutlich, können aber KEINE andere.
-    /// Bewusst nur dort, wo es sich wirklich lohnt: Für Spanisch und Russisch
-    /// gibt es (Stand Aug 2026) keine brauchbaren GGML-Fine-Tunes - die
-    /// vorhandenen sind large-v2-basiert (3 GB) und damit RAM-technisch sinnlos.
+    /// Models specialized on one language. They clearly beat the multilingual
+    /// models on their language, but cannot handle ANY other one.
+    /// Deliberately only where it really pays off: for Spanish and Russian there
+    /// are no usable GGML fine-tunes (as of Aug 2026). The ones that exist are
+    /// based on large-v2 (3 GB) and therefore pointless in terms of RAM.
     static let languageSpecific: [WhisperModel] = [
         WhisperModel(
             id: "large-v3-turbo-german-q5_0", displayName: "Large v3 Turbo",
@@ -133,8 +133,8 @@ final class ModelManager: NSObject, ObservableObject {
         ),
     ]
 
-    /// Frühere, unquantisierte Modelle. Nur sichtbar, solange installiert -
-    /// damit ein bestehendes Setup weiter auswählbar und löschbar bleibt.
+    /// Earlier, unquantized models. Only visible while installed, so an existing
+    /// setup stays selectable and deletable.
     static let legacyModels: [WhisperModel] = [
         WhisperModel(
             id: "tiny", displayName: "Tiny (f16)", fileName: "ggml-tiny.bin",
@@ -161,18 +161,18 @@ final class ModelManager: NSObject, ObservableObject {
 
     static let all: [WhisperModel] = multilingual + languageSpecific + legacyModels
 
-    /// Download-Fortschritt 0…1 je Modell-ID.
+    /// Download progress 0…1 per model ID.
     @Published var progress: [String: Double] = [:]
-    /// Modelle, deren letzter Download fehlgeschlagen ist.
+    /// Models whose last download failed.
     @Published var failed: Set<String> = []
 
-    /// taskIdentifier -> Modell-ID.
+    /// taskIdentifier -> model ID.
     ///
-    /// Hinter einer Sperre, weil `delegateQueue: nil` heißt: URLSession ruft die
-    /// Delegate-Methoden auf einer eigenen Hintergrund-Queue auf. Start und
-    /// Abbruch eines Downloads kommen dagegen vom Hauptthread. Ein Swift-Dictionary
-    /// verträgt das nicht - beim Vergrößern wird der Puffer neu angelegt, und der
-    /// lesende Thread greift dann ins Freigegebene (Absturz).
+    /// Behind a lock, because `delegateQueue: nil` means URLSession calls the
+    /// delegate methods on a background queue of its own. Starting and cancelling
+    /// a download come from the main thread instead. A Swift dictionary does not
+    /// tolerate that: when it grows, the buffer is reallocated, and the reading
+    /// thread then reaches into freed memory (a crash).
     private let tasksLock = NSLock()
     private var tasksStorage: [Int: String] = [:]
 
@@ -198,18 +198,18 @@ final class ModelManager: NSObject, ObservableObject {
         FileManager.default.fileExists(atPath: model.localPath)
     }
 
-    // MARK: - Empfehlung & Sichtbarkeit
+    // MARK: - Recommendation and visibility
 
-    /// Sprache, für die empfohlen wird: die eingestellte Diktatsprache, bei
-    /// „auto" die aufgelöste App-/Systemsprache.
+    /// The language recommendations are made for: the configured dictation
+    /// language, or with "auto" the resolved app/system language.
     private static var targetLanguage: String {
         let dictation = AppSettings.shared.language
         return dictation == "auto" ? L10n.lang : dictation
     }
 
-    /// Das Modell, das zu Sprache und Arbeitsspeicher dieses Macs passt.
-    /// Auf kleinen Macs hat Sparsamkeit Vorrang, sonst gewinnt Genauigkeit;
-    /// für Deutsch gibt es das Fine-Tune bei identischer Größe obendrauf.
+    /// The model that fits the language and the memory of this Mac. On small Macs
+    /// frugality wins, otherwise accuracy does. For German the fine-tune comes on
+    /// top at an identical size.
     static var recommendedID: String {
         let lang = targetLanguage
         let gigabytes = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
@@ -224,13 +224,13 @@ final class ModelManager: NSObject, ObservableObject {
         model.id == Self.recommendedID
     }
 
-    /// Mehrsprachige Modelle + installierte Altmodelle.
+    /// Multilingual models plus installed legacy models.
     var visibleGeneralModels: [WhisperModel] {
         Self.multilingual + Self.legacyModels.filter { isInstalled($0) }
     }
 
-    /// Sprachpakete: das der eigenen Sprache zuerst, fremde Sprachen darunter -
-    /// verstecken wäre falsch, jemand diktiert auch mal in einer zweiten Sprache.
+    /// Language packs: the one for your own language first, other languages below.
+    /// Hiding them would be wrong, people do dictate in a second language.
     var visibleLanguageModels: [WhisperModel] {
         let lang = Self.targetLanguage
         return Self.languageSpecific.sorted { a, b in
@@ -246,14 +246,14 @@ final class ModelManager: NSObject, ObservableObject {
         progress[model.id] != nil
     }
 
-    /// Aktiviert ein installiertes Modell - der lokale Server startet damit neu.
+    /// Activates an installed model, the local server restarts with it.
     func select(_ model: WhisperModel) {
         guard isInstalled(model) else { return }
         AppSettings.shared.modelPath = model.localPath
         AppSettings.shared.notifyChanged()
-        // Der Haken in der Liste hängt an isSelected(), das AppSettings liest -
-        // ohne diese Zeile blieb er beim alten Modell stehen, bis die Zeile aus
-        // einem anderen Grund neu gezeichnet wurde (z. B. Hover).
+        // The check mark in the list hangs off isSelected(), which reads
+        // AppSettings. Without this line it stayed on the old model until the row
+        // was redrawn for another reason (hovering, for example).
         objectWillChange.send()
     }
 
@@ -275,7 +275,7 @@ final class ModelManager: NSObject, ObservableObject {
         DispatchQueue.main.async { self.progress[model.id] = nil }
     }
 
-    /// Löscht eine heruntergeladene Modelldatei (nicht das aktive Modell).
+    /// Deletes a downloaded model file (not the active model).
     func delete(_ model: WhisperModel) {
         guard !isSelected(model) else { return }
         try? FileManager.default.removeItem(atPath: model.localPath)
@@ -294,8 +294,8 @@ extension ModelManager: URLSessionDownloadDelegate {
         DispatchQueue.main.async { self.progress[id] = value }
     }
 
-    /// SHA-256 in Blöcken, damit auch ein 1,6-GB-Modell nicht komplett in den
-    /// Speicher muss.
+    /// SHA-256 in blocks, so even a 1.6 GB model does not have to go into memory
+    /// completely.
     static func sha256Hex(of url: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -313,18 +313,18 @@ extension ModelManager: URLSessionDownloadDelegate {
         guard let id = modelID(forTask: downloadTask.taskIdentifier),
               let model = Self.all.first(where: { $0.id == id }) else { return }
 
-        // Ein HTTP-Fehler landet sonst als "Modell" auf der Platte: URLSession
-        // lädt auch eine 404-Seite brav herunter, und whisper-server scheitert
-        // später mit einer nichtssagenden Meldung. Lieber hier abbrechen.
+        // An HTTP error would otherwise land on disk as a "model": URLSession
+        // dutifully downloads a 404 page too, and whisper-server later fails with
+        // a meaningless message. Better to abort here.
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            NSLog("Orbly: Modell-Download \(model.id) fehlgeschlagen (HTTP \(http.statusCode))")
+            NSLog("Orbly: model download \(model.id) fehlgeschlagen (HTTP \(http.statusCode))")
             DispatchQueue.main.async { self.failed.insert(id) }
             return
         }
-        // GGML-Dateien beginnen mit der Magic 0x67676D6C. Sie steht little-endian
-        // in der Datei, die Bytes lesen sich also als "lmgg" - NICHT "ggml"
-        // (geprüft an den echten Modelldateien). Schützt zusätzlich vor
-        // HTML-Seiten, die mit Status 200 ausgeliefert werden.
+        // GGML files start with the magic 0x67676D6C. It sits little-endian in the
+        // file, so the bytes read as "lmgg" and NOT "ggml" (verified against the
+        // real model files). It also guards against HTML pages that are served
+        // with status 200.
         let ggmlMagic = Data([0x6C, 0x6D, 0x67, 0x67])
         let isGGML: Bool = {
             guard let handle = try? FileHandle(forReadingFrom: location) else { return false }
@@ -332,30 +332,30 @@ extension ModelManager: URLSessionDownloadDelegate {
             return (try? handle.read(upToCount: 4)) == ggmlMagic
         }()
         guard isGGML else {
-            NSLog("Orbly: Modell-Download \(model.id) ist keine GGML-Datei - verworfen")
+            NSLog("Orbly: model download \(model.id) is not a GGML file, discarded")
             DispatchQueue.main.async { self.failed.insert(id) }
             return
         }
-        // Echte Integritätsprüfung: Die GGML-Kennung oben erkennt nur grob
-        // falsche Dateien. Diese Datei wird anschließend von whisper.cpp im
-        // eigenen Prozess geparst, deshalb muss sie Byte für Byte die sein,
-        // die erwartet wird.
+        // A real integrity check: the GGML magic above only catches roughly wrong
+        // files. This file is then parsed by whisper.cpp in its own process, so it
+        // has to be byte for byte the one that is expected.
+        //
         guard let digest = Self.sha256Hex(of: location) else {
-            NSLog("Orbly: Modell \(model.id) nicht lesbar für die Prüfsumme - verworfen")
+            NSLog("Orbly: model \(model.id) not readable for the checksum, discarded")
             DispatchQueue.main.async { self.failed.insert(id) }
             return
         }
         guard digest == model.sha256 else {
             NSLog("""
-                Orbly: Prüfsumme von \(model.id) stimmt nicht - verworfen.
-                erwartet: \(model.sha256)
-                erhalten: \(digest)
+                Orbly: checksum of \(model.id) does not match, discarded.
+                expected: \(model.sha256)
+                received: \(digest)
                 """)
             DispatchQueue.main.async { self.failed.insert(id) }
             return
         }
 
-        // location ist nur bis zum Ende dieses Aufrufs gültig -> synchron verschieben.
+        // location is only valid until the end of this call -> move synchronously.
         let dest = URL(fileURLWithPath: model.localPath)
         do {
             try FileManager.default.createDirectory(
@@ -364,7 +364,7 @@ extension ModelManager: URLSessionDownloadDelegate {
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.moveItem(at: location, to: dest)
         } catch {
-            NSLog("Orbly: Modell-Download verschieben fehlgeschlagen: \(error)")
+            NSLog("Orbly: model download verschieben fehlgeschlagen: \(error)")
             DispatchQueue.main.async { self.failed.insert(id) }
         }
     }
@@ -377,7 +377,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         DispatchQueue.main.async {
             self.progress[id] = nil
             if let error, (error as NSError).code != NSURLErrorCancelled {
-                NSLog("Orbly: Modell-Download fehlgeschlagen: \(error)")
+                NSLog("Orbly: model download fehlgeschlagen: \(error)")
                 self.failed.insert(id)
             }
             self.objectWillChange.send()

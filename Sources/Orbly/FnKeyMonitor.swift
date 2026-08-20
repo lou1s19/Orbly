@@ -12,13 +12,13 @@ final class FnKeyMonitor {
     private var monitors: [Any] = []
     private var keyMonitors: [Any] = []
 
-    /// Die Tastenüberwachung läuft nur während eines Diktats.
+    /// Key monitoring only runs during a dictation.
     ///
-    /// Ein globaler `.keyDown`-Monitor weckt diesen Prozess bei JEDEM Tastendruck
-    /// im ganzen System auf, also auch beim Schreiben in einer anderen App. Die
-    /// Auswertung braucht Orbly aber nur, solange aufgenommen oder transkribiert
-    /// wird (Esc bricht ab, andere Tasten heißen "Fn war als Modifier gemeint").
-    /// Der `.flagsChanged`-Monitor muss dagegen dauerhaft laufen, sonst käme der
+    /// A global `.keyDown` monitor wakes this process on EVERY keystroke in the
+    /// whole system, including typing in another app. Orbly only needs to evaluate
+    /// them while recording or transcribing (Esc aborts, any other key means "Fn
+    /// was meant as a modifier"). The `.flagsChanged` monitor on the other hand has
+    /// to run permanently, otherwise the Fn press would never arrive.
     /// Fn-Druck nie an.
     func setKeyMonitoringEnabled(_ enabled: Bool) {
         if enabled {

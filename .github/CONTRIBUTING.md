@@ -1,49 +1,49 @@
-# Beitragen
+# Contributing
 
-Danke, dass du dir das ansiehst. Kurz und schmerzlos:
+Thanks for taking a look. Short and painless:
 
-## Bevor du anfängst
+## Before you start
 
-Bei kleinen Fixes einfach einen Pull Request aufmachen. Bei allem, was mehr als eine
-Datei anfasst, vorher ein Issue, damit die Arbeit nicht ins Leere läuft.
+For small fixes just open a pull request. For anything that touches more than one
+file, open an issue first so the work does not go to waste.
 
-## Einrichten
+## Setup
 
 ```bash
-brew install cmake                    # einmalig, für die Whisper-Engine
-swift build                           # baut das Paket
-swift test                            # 48 Tests
-bash scripts/build-app.sh             # baut die App und installiert sie
+brew install cmake                    # once, for the Whisper engine
+swift build                           # builds the package
+swift test                            # runs the test suite
+bash scripts/build-app.sh             # builds the app and installs it
 ```
 
-macOS 14 oder neuer. Ein Xcode-Projekt gibt es nicht, alles läuft über SwiftPM.
+macOS 14 or newer. There is no Xcode project, everything goes through SwiftPM.
 
-Hinweis: SourceKit zeigt in diesem Projekt gelegentlich Fehler an, die nicht
-existieren („cannot find X in scope"). Maßgeblich ist `swift build`.
+Note: SourceKit occasionally reports errors in this project that do not exist
+("cannot find X in scope"). `swift build` is what counts.
 
-## Was die Tests durchsetzen
+## What the tests enforce
 
-Zwei Regeln fallen sonst erst dem Nutzer auf, deshalb prüfen sie Tests:
+Two rules that would otherwise only surface for users, so tests check them:
 
-1. **Übersetzungen.** Jeder nutzersichtbare Text gehört nach
-   `Sources/Orbly/L10n.swift`, und zwar in **allen fünf** Sprachen (en, de, es, fr,
-   ru). Fehlt eine, schlägt `L10nTests` fehl. Auch Platzhalter (`%@`, `%d`) müssen
-   in allen Sprachen gleich viele und gleich geordnet sein.
-2. **Keine Gedankenstriche** (`–`, `—`) in UI-Texten, auch nicht in Modellnamen.
-   Komma, Punkt, Doppelpunkt oder Klammer stattdessen.
+1. **Translations.** Every user-visible string belongs in
+   `Sources/Orbly/L10n.swift`, in **all five** languages (en, de, es, fr, ru).
+   If one is missing, `L10nTests` fails. Placeholders (`%@`, `%d`) also have to
+   appear the same number of times and in the same order in every language.
+2. **No em or en dashes** (`–`, `—`) in UI strings, not even in model names.
+   Use a comma, a period, a colon or brackets instead.
 
-## Stil
+## Style
 
-- Bestehende Muster wiederverwenden statt neue einführen (`cardStyle`,
-  `GlassSegmented`, die JSONL-Speicher).
-- Kommentare erklären das **Warum**, nicht das Was. Besonders bei allem, was nach
-  einem Umweg aussieht: Oft steckt eine macOS-Eigenheit dahinter, und ohne Notiz
-  baut der Nächste es „sauber" zurück und der Fehler ist wieder da.
-- Kleine Pull Requests. Ein Thema pro PR.
+- Reuse existing patterns instead of introducing new ones (`cardStyle`,
+  `GlassSegmented`, the JSONL stores).
+- Comments explain the **why**, not the what. Especially for anything that looks
+  like a detour: there is usually a macOS quirk behind it, and without a note the
+  next person "cleans it up" and the bug is back.
+- Small pull requests. One topic per PR.
 
-## Vor dem Absenden
+## Before you submit
 
-`swift build` und `swift test` müssen grün sein. Die CI prüft dasselbe.
+`swift build` and `swift test` have to be green. CI checks the same.
 
-Bei Änderungen an der Oberfläche bitte die App wirklich bauen und anklicken.
-Ein Diktat lässt sich nicht durch Tests abdecken.
+For changes to the interface, please actually build the app and click through it.
+A dictation cannot be covered by tests.

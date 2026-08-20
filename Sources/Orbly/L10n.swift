@@ -1,6 +1,6 @@
 import Foundation
 
-/// Zentrale UI-Übersetzungen. Sprache kommt aus den Einstellungen
+/// Central UI translations. The language comes from the settings
 /// (AppSettings.shared.resolvedAppLanguage liefert "en"/"de"/"es"/"fr"/"ru").
 enum L10n {
     static var lang: String { AppSettings.shared.resolvedAppLanguage }
@@ -10,15 +10,15 @@ enum L10n {
         tables[lang]?[key] ?? tables["en"]?[key] ?? key
     }
 
-    /// Text mit Platzhaltern (String(format:)-Syntax, %d / %@).
+    /// Text with placeholders (String(format:) syntax, %d / %@).
     static func t(_ key: String, _ args: CVarArg...) -> String {
         String(format: t(key), arguments: args)
     }
 
-    /// Nicht `private`, damit der Gleichstands-Test in `Tests/` prüfen kann, dass
-    /// alle Sprachen dieselben Schlüssel und dieselben Platzhalter haben. Genau
-    /// diese Klasse von Fehlern (fehlende Übersetzung, abweichendes %@) fällt
-    /// sonst erst dem Nutzer auf.
+    /// Not `private`, so the parity test in `Tests/` can check that all languages
+    /// carry the same keys and the same placeholders. Exactly this class of bug
+    /// (missing translation, differing %@) would otherwise only be noticed by the
+    /// user.
     static let tables: [String: [String: String]] = [
         "en": [
             "menu.ready": "Ready, hold Fn to dictate",

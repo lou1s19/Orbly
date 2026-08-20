@@ -1,13 +1,13 @@
 import Foundation
 
-/// Ein abgeschlossenes Diktat für die Statistik. Es wird bewusst KEIN Text
-/// gespeichert - nur Zahlen (Datenminimierung), der Text selbst steht optional
-/// im Verlauf.
+/// One finished dictation, for the statistics. Deliberately NO text is stored,
+/// only numbers (data minimization). The text itself optionally lives in the
+/// history.
 struct DictationStat: Codable {
     let date: Date
     let words: Int
     let characters: Int
-    /// Aufnahmedauer in Sekunden.
+    /// Recording length in seconds.
     let seconds: Double
 }
 
@@ -21,7 +21,7 @@ struct StatsSummary {
     var dictations = 0
     var words = 0
     var spokenSeconds: Double = 0
-    /// Geschätzte Ersparnis gegenüber Selbertippen.
+    /// Estimated saving compared to typing it yourself.
     var savedSeconds: Double = 0
     var perDay: [DayWords] = []
 
@@ -30,41 +30,41 @@ struct StatsSummary {
     }
 }
 
-/// Zusammengefasste Altdaten. Damit `stats.jsonl` nicht unbegrenzt wächst,
-/// werden alte Einzeleinträge zu diesen vier Zahlen verdichtet - die
-/// Gesamtsummen bleiben exakt, nur die Tagesauflösung alter Tage entfällt
-/// (das Diagramm zeigt ohnehin 14 Tage).
+/// Summarized old data. So that `stats.jsonl` does not grow without bound, old
+/// individual entries are compacted into these four numbers. The totals stay
+/// exact, only the per-day resolution of old days is dropped (the chart shows
+/// 14 days anyway).
 struct StatsArchive: Codable, Equatable {
     var dictations = 0
     var words = 0
     var spokenSeconds: Double = 0
     var savedSeconds: Double = 0
-    /// So viele Einträge am ANFANG von `stats.jsonl` stecken schon in den Zahlen
-    /// oben drüber.
+    /// This many entries at the START of `stats.jsonl` are already contained in
+    /// the numbers above.
     ///
-    /// Verdichten braucht zwei Dateischreibvorgänge (Archiv, dann gekürzte
-    /// Einzelliste), und die gehen nicht gemeinsam atomar. Bricht es dazwischen
-    /// ab (Platte voll), stehen dieselben Einträge beim nächsten Lauf noch da und
-    /// wurden ohne diese Marke ein zweites Mal aufaddiert: Die Gesamtzahlen
-    /// blieben dauerhaft zu hoch.
+    /// Compaction needs two file writes (the archive, then the shortened list of
+    /// entries), and those cannot be atomic together. If it aborts in between
+    /// (disk full), the same entries are still there on the next run and without
+    /// this marker were added up a second time: the totals stayed permanently too
+    /// high.
     ///
-    /// Bewusst eine Anzahl und kein Zeitstempel: Einträge stehen in der
-    /// Reihenfolge, in der sie geschrieben wurden, und diese Reihenfolge stimmt
-    /// auch dann noch, wenn die Systemuhr springt (Zeitumstellung, NTP-Korrektur).
-    /// Eine Zeitmarke hätte einen nach dem Rücksprung geschriebenen Eintrag
-    /// verworfen, ohne ihn je zu zählen.
+    /// Deliberately a count and not a timestamp: entries sit in the order they
+    /// were written, and that order still holds when the system clock jumps
+    /// (daylight saving, an NTP correction). A time marker would have discarded an
+    /// entry written after the jump back without ever counting it.
+    ///
     var compactedPrefix = 0
 }
 
-/// Persistente Diktier-Statistik als JSON-Lines-Datei im App-Support-Ordner.
+/// Persistent dictation statistics as a JSON Lines file in Application Support.
 enum Stats {
-    /// Durchschnittliches Tipptempo, gegen das die Ersparnis gerechnet wird.
+    /// Average typing speed the saving is calculated against.
     static let typingWordsPerMinute = 40.0
-    /// Ab diesem Alter werden Einzeleinträge verdichtet.
+    /// From this age on, individual entries are compacted.
     static let compactAfterDays = 30
 
-    /// Alle Dateizugriffe laufen hierüber: `record` kommt vom Main-Thread,
-    /// Verdichten und Auswerten vom Hintergrund.
+    /// All file access goes through this: `record` comes from the main thread,
+    /// compaction and evaluation from the background.
     private static let queue = DispatchQueue(label: "orbly.stats")
 
     static var url: URL {
@@ -95,9 +95,9 @@ enum Stats {
             at: AppSettings.appSupportDir, withIntermediateDirectories: true
         )
         restrictPermissions()
-        // `seekToEnd`/`write(contentsOf:)` statt der alten `seekToEndOfFile`/`write`:
-        // Die alten melden Fehler per NSException, die Swift nicht fangen kann.
-        // Eine volle Platte genau beim Speichern beendete damit die ganze App.
+        // `seekToEnd`/`write(contentsOf:)` instead of the old `seekToEndOfFile`/`write`:
+        // the old ones report errors through an NSException, which Swift cannot catch.
+        // A full disk exactly while saving therefore terminated the whole app.
         do {
             if let handle = try? FileHandle(forWritingTo: url) {
                 defer { try? handle.close() }
@@ -107,18 +107,18 @@ enum Stats {
                 try line.write(to: url)
             }
         } catch {
-            NSLog("Orbly: Statistik konnte nicht gespeichert werden: \(error)")
+            NSLog("Orbly: could not save the statistics: \(error)")
         }
     }
 
 
-    /// Nur für den Besitzer lesbar. `Application Support` ist im Gegensatz zu
-    /// Schreibtisch und Dokumente NICHT von macOS geschützt: Mit den üblichen
-    /// 0644 konnte jede andere App unter demselben Benutzer die Diktate lesen.
+    /// Readable by the owner only. Unlike Desktop and Documents, `Application
+    /// Support` is NOT protected by macOS: with the usual 0644 any other app
+    /// running as the same user could read the dictations.
     ///
-    /// Bewusst auch für BESTEHENDE Dateien: Wer schon diktiert hat, hätte sonst
-    /// als Einziger weiter eine offene Datei, und genau das sind die Nutzer mit
-    /// Inhalt darin.
+    /// Deliberately for EXISTING files too: whoever has dictated before would
+    /// otherwise be the only one left with an open file, and those are exactly the
+    /// users who have content in it.
     static func restrictPermissions() {
         let fm = FileManager.default
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: AppSettings.appSupportDir.path)
@@ -135,7 +135,7 @@ enum Stats {
         return decode(content)
     }
 
-    /// Reine Funktion, damit sie testbar ist.
+    /// A pure function, so it can be tested.
     static func decode(_ content: String) -> [DictationStat] {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -151,10 +151,10 @@ enum Stats {
         return archive
     }
 
-    // MARK: - Auswertung
+    // MARK: - Evaluation
 
-    /// Rechnet die Zusammenfassung aus fertigen Werten. Keine Datei, keine Uhr,
-    /// kein Kalender aus der Umgebung - genau deshalb testbar.
+    /// Computes the summary from finished values. No file, no clock, no calendar
+    /// from the environment, which is exactly why it is testable.
     static func summarize(
         _ entries: [DictationStat],
         archive: StatsArchive = StatsArchive(),
@@ -191,8 +191,8 @@ enum Stats {
         return max(0, typingSeconds - entry.seconds)
     }
 
-    /// Verdichtet Einträge, die älter als `olderThanDays` sind, in das Archiv.
-    /// Reine Funktion: liefert das neue Archiv und die zu behaltenden Einträge.
+    /// Compacts entries older than `olderThanDays` into the archive.
+    /// A pure function: returns the new archive and the entries to keep.
     static func compacted(
         _ entries: [DictationStat], into archive: StatsArchive,
         olderThanDays days: Int, now: Date = Date()
@@ -207,24 +207,24 @@ enum Stats {
                 continue
             }
             verdichtet += 1
-            // Zwei Bedingungen, und beide müssen stimmen: Der Eintrag steht im
-            // schon verdichteten Anfangsstück UND er ist alt genug. Die zweite
-            // schützt den Fall „Kürzen hat geklappt, das zweite Schreiben des
-            // Archivs nicht": Danach stehen vorne junge Einträge, die auf keinen
-            // Fall verworfen werden dürfen.
+            // Two conditions, and both have to hold: the entry sits in the already
+            // compacted leading part AND it is old enough. The second one covers the
+            // case "shortening worked, writing the archive the second time did not":
+            // after that there are recent entries at the front which must not be
+            // discarded under any circumstances.
             if index < archive.compactedPrefix { continue }
             newArchive.dictations += 1
             newArchive.words += entry.words
             newArchive.spokenSeconds += entry.seconds
             newArchive.savedSeconds += savedSeconds(for: entry)
         }
-        // Geht das Kürzen gleich schief, ist genau dieses Anfangsstück beim
-        // nächsten Lauf schon gezählt.
+        // If the shortening fails right away, exactly this leading part is
+        // already counted on the next run.
         newArchive.compactedPrefix = verdichtet
         return (newArchive, kept)
     }
 
-    /// Beim Start aufrufen: hält `stats.jsonl` klein, ohne Gesamtsummen zu verlieren.
+    /// Call at startup: keeps `stats.jsonl` small without losing the totals.
     static func compactOldEntries() {
         queue.async {
             let entries = load()
@@ -234,50 +234,50 @@ enum Stats {
 
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            // Reihenfolge ist Absicht: erst das Archiv, dann die Einzeleinträge
-            // kürzen. Bricht es dazwischen ab, sind Zahlen doppelt statt verloren,
-            // und `compactedPrefix` sorgt dafür, dass der nächste Lauf sie nicht
-            // noch einmal zählt. Andersherum wären sie ersatzlos weg.
+            // The order is deliberate: the archive first, then shorten the list of
+            // entries. If it aborts in between, numbers are duplicated rather than
+            // lost, and `compactedPrefix` makes sure the next run does not count them
+            // again. The other way round they would be gone for good.
             guard let archiveData = try? JSONEncoder().encode(result.archive),
                   (try? archiveData.write(to: archiveURL)) != nil else {
-                NSLog("Orbly: Statistik-Archiv nicht schreibbar - Verdichten übersprungen")
+                NSLog("Orbly: statistics archive not writable, compaction skipped")
                 return
             }
             let lines = result.kept.compactMap { try? encoder.encode($0) }
                 .compactMap { String(data: $0, encoding: .utf8) }
             let output = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
             guard (try? Data(output.utf8).write(to: url)) != nil else {
-                NSLog("Orbly: Statistik-Einträge nicht kürzbar - Archiv merkt sich das")
+                NSLog("Orbly: statistics entries could not be shortened, the archive remembers that")
                 return
             }
-            // Gekürzt ist gekürzt: Das Anfangsstück steht nicht mehr in der Datei,
-            // die Marke muss zurück auf 0. Schlägt genau dieses Schreiben fehl,
-            // ist nichts kaputt: Die verbliebenen Einträge sind alle jünger als
-            // die Verdichtungsgrenze, und die Marke greift nur bei alten.
+            // Shortened is shortened: the leading part is no longer in the file, so
+            // the marker has to go back to 0. If exactly this write fails, nothing is
+            // broken: the remaining entries are all younger than the compaction
+            // threshold, and the marker only applies to old ones.
             var aufgeraeumt = result.archive
             aufgeraeumt.compactedPrefix = 0
             if let data = try? JSONEncoder().encode(aufgeraeumt) {
                 try? data.write(to: archiveURL)
             }
-            restrictPermissions() // write(to:) legt neu an, mit Standardrechten
+            restrictPermissions() // write(to:) creates it anew, with default permissions
             cachedSummary = nil
-            NSLog("Orbly: Statistik verdichtet - \(entries.count - result.kept.count) alte Einträge zusammengefasst")
+            NSLog("Orbly: statistics compacted, \(entries.count - result.kept.count) old entries summarized")
         }
     }
 
-    // MARK: - Zwischenspeicher (nicht auf dem Main-Thread parsen)
+    // MARK: - Cache (do not parse on the main thread)
 
     private static var cachedSummary: StatsSummary?
 
-    /// Nach „alle Daten löschen" aufrufen. Ohne das zeigte die Übersicht die
-    /// alten Zahlen bis zum nächsten Start weiter.
+    /// Call after "delete all data". Without it the overview kept showing the old
+    /// numbers until the next launch.
     static func invalidateCache() {
         queue.async { cachedSummary = nil }
     }
 
-    /// Liest und rechnet im Hintergrund, `completion` läuft auf dem Main-Thread.
-    /// Vorher lief das synchron beim Öffnen des Fensters und wurde mit jeder
-    /// Nutzungswoche langsamer.
+    /// Reads and computes in the background, `completion` runs on the main thread.
+    /// This used to run synchronously when the window opened and got slower with
+    /// every week of use.
     static func summaryAsync(days: Int = 14, completion: @escaping (StatsSummary) -> Void) {
         queue.async {
             if let cachedSummary {

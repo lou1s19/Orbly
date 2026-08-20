@@ -1,4 +1,4 @@
-# Haelt die GitHub-Actions und Swift-Abhaengigkeiten aktuell.
+# Keeps the GitHub Actions and Swift dependencies up to date.
 version: 2
 updates:
   - package-ecosystem: "github-actions"

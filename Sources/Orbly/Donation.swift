@@ -1,24 +1,24 @@
 import Foundation
 
-/// Spendenhinweis. Orbly ist quelloffen und bleibt kostenlos, deshalb fragt die
-/// App genau einmal höflich nach, sobald sie sich im Alltag bewährt hat.
+/// Donation prompt. Orbly is open source and stays free, so the app asks
+/// politely exactly once, after it has proven itself in everyday use.
 ///
-/// Bewusst ohne Server, ohne Konto und ohne Prüfung: Wer bestätigt, gespendet zu
-/// haben, wird geglaubt. Bei offenem Quellcode wäre jede Prüfung in zwei Minuten
-/// entfernt, und ein Bezahlserver würde genau die Daten sammeln, die Orbly sonst
+/// Deliberately without a server, an account or a check: whoever confirms they
+/// donated is believed. With open source any check would be removed in two
+/// minutes, and a payment server would collect exactly the data Orbly otherwise
 /// vermeidet.
 enum Donation {
     static let pageURL = URL(string: "https://ko-fi.com/lou1s")!
 
-    /// Vorher kennt der Nutzer die App noch nicht gut genug, um zu beurteilen,
-    /// ob sie ihm etwas wert ist.
+    /// Before that the user does not know the app well enough to judge whether it
+    /// is worth anything to them.
     static let minimumDictations = 20
 
     /// Abstand zwischen zwei Nachfragen.
     static let repeatAfterDays = 14
 
-    /// Alles, was über das Anzeigen entscheidet. Als eigener Typ, damit die
-    /// Regel ohne UserDefaults testbar bleibt.
+    /// Everything that decides whether to show it. A separate type, so the rule
+    /// stays testable without UserDefaults.
     struct State: Equatable {
         var hasDonated = false
         var promptDisabled = false
@@ -30,18 +30,18 @@ enum Donation {
     static func shouldShow(_ state: State, now: Date = Date()) -> Bool {
         // Gespendet oder abbestellt: nie wieder.
         guard !state.hasDonated, !state.promptDisabled else { return false }
-        // Nicht in die Erst-Tour hineinfragen.
+        // Do not interrupt the first-run tour with it.
         guard state.onboardingCompleted else { return false }
         guard state.dictations >= minimumDictations else { return false }
         guard let last = state.lastShown else { return true }
         let days = now.timeIntervalSince(last) / 86_400
-        // Negativ heißt: gespeicherter Zeitpunkt liegt in der Zukunft (verstellte
-        // Uhr). Dann lieber schweigen, statt bei jedem Start zu fragen.
+        // Negative means the stored date is in the future (clock changed). Then
+        // stay quiet rather than ask on every launch.
         guard days >= 0 else { return false }
         return days >= Double(repeatAfterDays)
     }
 
-    /// Aktueller Stand aus den Einstellungen.
+    /// Current state from the settings.
     static var currentState: State {
         let settings = AppSettings.shared
         return State(
