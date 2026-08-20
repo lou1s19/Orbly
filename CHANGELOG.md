@@ -5,6 +5,13 @@ All notable changes to Orbly. Newest first. This project follows
 
 ## [Unreleased]
 
+### Added
+- The dictation key can be changed. Fn stays the default, but you can move
+  dictation to the right Command, Option or Control key. macOS uses Fn to switch
+  the input source, which made Orbly awkward for anyone typing in more than one
+  language (#2). The menu, the overlay and the first-run tour name the key you
+  picked.
+
 ### Fixed
 - Orbly kept using 10 to 14 % CPU after every dictation for the rest of the
   session. An invisible animation went on running at 60 fps behind a hidden

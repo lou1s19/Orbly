@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var statusMenuItem: NSMenuItem!
     private var ramMenuItem: NSMenuItem!
     private let recorder = AudioRecorder()
-    private let fnMonitor = FnKeyMonitor()
+    private let keyMonitor = DictationKeyMonitor(key: AppSettings.shared.dictationKey)
     private let overlay = OverlayController()
     private let localServer = LocalServerManager()
     private let transcriber = Transcriber()
@@ -43,16 +43,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         didSet {
             guard state != oldValue else { return }
             let aktiv = state != .idle
+            // Back to idle without a release event (Esc, a failed recording, the
+            // watchdog): the monitor would still believe the key is held and
+            // ignore the next press as a repeat. Only clear it when the key
+            // really is up, otherwise a dictation that is still being held would
+            // lose its release.
+            if !aktiv, keyMonitor.keyIsDown,
+               !NSEvent.modifierFlags.contains(keyMonitor.key.modifier) {
+                keyMonitor.clearHeldState()
+            }
             // Not synchronous: the change to .idle often happens INSIDE the handler
             // of the keyDown monitor (Esc aborts). An NSEvent.removeMonitor on the
             // block that is currently running would be undefined behaviour.
             DispatchQueue.main.async { [weak self] in
                 guard let self, (self.state != .idle) == aktiv else { return }
-                self.fnMonitor.setKeyMonitoringEnabled(aktiv)
+                self.keyMonitor.setKeyMonitoringEnabled(aktiv)
             }
         }
     }
-    private var fnPressStarted: Date?
+    private var keyPressStarted: Date?
     private var toggleSession = false
     /// The app the dictation was started in. Text is only inserted there.
     private var dictationTargetApp: NSRunningApplication?
@@ -63,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Push-to-talk watchdog: with secure input active (a password field) the
     /// global monitor no longer sees Fn being released. Without this check the
     /// recording would run to the 10 minute limit and then be pasted.
-    private var fnWatchdog: Timer?
+    private var keyWatchdog: Timer?
     /// Upper limit for forgotten toggle recordings (RAM grows by about 230 MB/h).
     private let maxRecordingSeconds: TimeInterval = 600
     /// Show the system dialog for accessibility only once per session.
@@ -101,18 +110,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self.localServer.noteActivity()
         }
 
-        fnMonitor.onFnDown = { [weak self] in self?.handleFnDown() }
-        fnMonitor.onFnUp = { [weak self] in self?.handleFnUp() }
-        fnMonitor.onOtherKeyDown = { [weak self] keyCode in
+        keyMonitor.onKeyDown = { [weak self] in self?.handleKeyDown() }
+        keyMonitor.onKeyUp = { [weak self] in self?.handleKeyUp() }
+        keyMonitor.onOtherKeyDown = { [weak self] keyCode in
             self?.handleOtherKeyDown(keyCode)
         }
-        fnMonitor.start()
+        keyMonitor.start()
 
         NotificationCenter.default.addObserver(
             forName: AppSettings.changedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             self?.reconcileIfTranscriptionSettingsChanged()
             self?.pruneHistoryOnSettingsChange()
+            self?.applyDictationKeyIfChanged()
             self?.applyLanguageIfChanged()
             self?.updateStatus()
         }
@@ -149,6 +159,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func pruneHistoryOnSettingsChange() {
         guard !AppSettings.shared.historyEnabled else { return }
         History.pruneOldEntries()
+    }
+
+    /// The dictation key can be changed in the settings and in the first-run
+    /// tour. The monitor keeps its own copy, so it has to be told.
+    private func applyDictationKeyIfChanged() {
+        let wanted = AppSettings.shared.dictationKey
+        guard keyMonitor.key != wanted else { return }
+        keyMonitor.key = wanted
     }
 
     private func reconcileIfTranscriptionSettingsChanged() {
@@ -341,16 +359,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    // MARK: - Fn key handling
+    // MARK: - Dictation key handling
 
-    private func handleFnDown() {
+    private func handleKeyDown() {
         switch state {
         case .idle:
-            fnPressStarted = Date()
+            keyPressStarted = Date()
             toggleSession = false
             startDictation()
         case .recording:
-            // Second Fn press ends a toggle session
+            // A second press ends a toggle session
             if toggleSession {
                 stopAndTranscribe()
             }
@@ -359,11 +377,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    private func handleFnUp() {
+    private func handleKeyUp() {
         guard state == .recording, !toggleSession else { return }
-        let held = Date().timeIntervalSince(fnPressStarted ?? Date())
+        let held = Date().timeIntervalSince(keyPressStarted ?? Date())
         if held < 0.35 {
-            // Short tap: switch to toggle mode, keep recording until next Fn tap
+            // Short tap: switch to toggle mode, keep recording until the next tap
             toggleSession = true
         } else {
             // Push-to-talk: released after holding -> done
@@ -373,7 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func handleOtherKeyDown(_ keyCode: UInt16) {
         // Esc cancels the processing too. Otherwise the user is stuck with a
-        // server that does not answer until the timeout, and Fn does nothing.
+        // server that does not answer until the timeout, and the key does nothing.
         if keyCode == 53, state == .processing {
             dictationSession += 1 // discard a late answer
             // Really cancel the work in flight, do not just throw the result
@@ -397,9 +415,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // The app's own simulated ⌘V comes back through the global monitor.
         // It must not cancel the next dictation.
         if TextInserter.isPasting { return }
-        // Any key while Fn is held down: user is using Fn as a modifier
-        // (Fn+arrows etc.) -> this was not a dictation attempt.
-        if !toggleSession && fnMonitor.fnIsDown {
+        // Any key while the dictation key is held down: it is being used as a
+        // modifier (Fn plus arrows and the like), so this was no dictation.
+        if !toggleSession && keyMonitor.keyIsDown {
             cancelDictation()
         }
     }
@@ -422,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             // If the permission arrived asynchronously (first launch, permission
             // dialog), Fn was released long ago. Do not secretly keep recording.
-            guard self.fnMonitor.fnIsDown else { return }
+            guard self.keyMonitor.keyIsDown else { return }
             do {
                 try self.recorder.start()
                 self.state = .recording
@@ -443,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 ) { [weak self] _ in
                     self?.stopAndTranscribe()
                 }
-                self.startFnWatchdog()
+                self.startKeyWatchdog()
             } catch {
                 self.report(error: L10n.t("overlay.error.recordingFailed"))
                 NSLog("Orbly: recorder start failed: \(error)")
@@ -451,34 +469,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    /// Checks the real state of the Fn key during push-to-talk. If the user clicks
-    /// into a password field mid-dictation, macOS turns secure input on and the
-    /// monitor no longer sees the release. Without this watchdog the recording
-    /// would run to the 10 minute limit and then be pasted somewhere.
+    /// Checks the real state of the dictation key during push-to-talk. If the
+    /// user clicks into a password field mid-dictation, macOS turns secure input
+    /// on and the monitor no longer sees the release. Without this watchdog the
+    /// recording would run to the 10 minute limit and then be pasted somewhere.
     ///
-    private func startFnWatchdog() {
-        fnWatchdog?.invalidate()
-        // Deliberately fail-safe: it only stops once the watchdog has seen the Fn
-        // key held down at least once ITSELF. If `NSEvent.modifierFlags` reports
-        // no `.function` on some keyboard, it never fires, and the app behaves as
-        // before instead of choking off every dictation after 0.4 s.
-        var sawFnHeld = false
-        fnWatchdog = Timer.scheduledCommon(every: 0.4, repeats: true) { [weak self] _ in
+    private func startKeyWatchdog() {
+        keyWatchdog?.invalidate()
+        // Deliberately fail-safe: it only stops once the watchdog has seen the key
+        // held down at least once ITSELF. If `NSEvent.modifierFlags` reports the
+        // modifier on no keyboard, it never fires, and the app behaves as before
+        // instead of choking off every dictation after 0.4 s.
+        let modifier = keyMonitor.key.modifier
+        var sawKeyHeld = false
+        keyWatchdog = Timer.scheduledCommon(every: 0.4, repeats: true) { [weak self] _ in
             guard let self else { return }
             guard self.state == .recording, !self.toggleSession else { return }
-            if NSEvent.modifierFlags.contains(.function) {
-                sawFnHeld = true
+            if NSEvent.modifierFlags.contains(modifier) {
+                sawKeyHeld = true
                 return
             }
-            guard sawFnHeld else { return }
-            NSLog("Orbly: Fn release not received (secure input?), ending the dictation")
+            guard sawKeyHeld else { return }
+            NSLog("Orbly: key release not received (secure input?), ending the dictation")
+            // The release event never arrived, so the monitor still believes the
+            // key is held. Without this the next press looks like a repeat and
+            // dictation stays dead until the app is restarted.
+            self.keyMonitor.clearHeldState()
             self.stopAndTranscribe()
         }
     }
 
     private func cancelDictation() {
         maxDurationTimer?.invalidate()
-        fnWatchdog?.invalidate()
+        keyWatchdog?.invalidate()
         overlay.setServerStarting(false)
         mediaController.restorePlayers()
         recorder.cancel()
@@ -509,7 +532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             dictationTargetApp = front
         }
         maxDurationTimer?.invalidate()
-        fnWatchdog?.invalidate()
+        keyWatchdog?.invalidate()
         // Resume the music right when Fn is released, not after transcription.
         mediaController.restorePlayers()
         toggleSession = false
@@ -722,7 +745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         historyItem.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
         menu.addItem(historyItem)
         menu.addItem(.separator())
-        statusMenuItem = NSMenuItem(title: L10n.t("menu.ready"), action: nil, keyEquivalent: "")
+        statusMenuItem = NSMenuItem(title: L10n.t("menu.ready", AppSettings.shared.dictationKey.displayName), action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
         menu.addItem(statusMenuItem)
         ramMenuItem = NSMenuItem(title: L10n.t("menu.ram", "..."), action: nil, keyEquivalent: "")
@@ -765,10 +788,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             // nothing at all. "Ready" would be a lie, and that has to be visible
             // here without opening the settings first.
             if !AXIsProcessTrusted() {
-                statusMenuItem.title = L10n.t("menu.status.axMissing")
+                statusMenuItem.title = L10n.t("menu.status.axMissing", AppSettings.shared.dictationKey.displayName)
                 symbol = "exclamationmark.triangle"
             } else {
-                statusMenuItem.title = L10n.t("menu.status.idle", modeText)
+                statusMenuItem.title = L10n.t("menu.status.idle", modeText, AppSettings.shared.dictationKey.displayName)
                 symbol = "waveform.circle"
             }
         case .recording:

@@ -217,7 +217,7 @@ private struct WelcomeStep: View {
             PageHeader(
                 icon: "waveform",
                 title: L10n.t("onboarding.welcome.title"),
-                subtitle: L10n.t("onboarding.welcome.body")
+                subtitle: L10n.t("onboarding.welcome.body", AppSettings.shared.dictationKey.displayName)
             )
 
             HStack(alignment: .top, spacing: 16) {
@@ -275,7 +275,7 @@ private struct PermissionsStep: View {
 
                 permissionCard(
                     title: L10n.t("onboarding.permissions.ax"),
-                    hint: L10n.t("onboarding.permissions.ax.hint"),
+                    hint: L10n.t("onboarding.permissions.ax.hint", AppSettings.shared.dictationKey.displayName),
                     granted: axTrusted,
                     action: requestAccessibility
                 ) {
@@ -559,7 +559,7 @@ private struct TryStep: View {
                             .font(.system(size: 27, weight: .bold))
                             .tracking(-0.4)
                             .foregroundStyle(OB.title)
-                        Text(.init(L10n.t("onboarding.try.body")))
+                        Text(.init(L10n.t("onboarding.try.body", AppSettings.shared.dictationKey.displayName)))
                             .font(.system(size: 14.5))
                             .foregroundStyle(OB.text)
                             .lineSpacing(3)
@@ -592,7 +592,7 @@ private struct TryStep: View {
                 .obCard(padding: 24)
             }
 
-            Text(L10n.t("onboarding.try.hintEsc"))
+            Text(L10n.t("onboarding.try.hintEsc", AppSettings.shared.dictationKey.displayName))
                 .font(.system(size: 12))
                 .foregroundStyle(OB.faint)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -684,10 +684,10 @@ private struct WaitingForFn: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            OBKeyCap(label: "fn", wide: true)
+            OBKeyCap(label: AppSettings.shared.dictationKey.symbol, wide: true)
                 .scaleEffect(pulse ? 1.08 : 1)
                 .shadow(color: Color.accentColor.opacity(pulse ? 0.45 : 0), radius: 16)
-            Text(L10n.t("onboarding.try.idle"))
+            Text(L10n.t("onboarding.try.idle", AppSettings.shared.dictationKey.displayName))
                 .font(.system(size: 14))
                 .foregroundStyle(OB.text)
         }
@@ -748,12 +748,12 @@ private struct DoneStep: View {
             )
 
             VStack(spacing: 16) {
-                gestureRow(key: "fn",
-                           title: L10n.t("onboarding.done.hold"),
+                gestureRow(key: AppSettings.shared.dictationKey.symbol,
+                           title: L10n.t("onboarding.done.hold", AppSettings.shared.dictationKey.displayName),
                            hint: L10n.t("onboarding.done.hold.hint"))
                 OBDivider()
-                gestureRow(key: "fn",
-                           title: L10n.t("onboarding.done.tap"),
+                gestureRow(key: AppSettings.shared.dictationKey.symbol,
+                           title: L10n.t("onboarding.done.tap", AppSettings.shared.dictationKey.displayName),
                            hint: L10n.t("onboarding.done.tap.hint"))
                 OBDivider()
                 gestureRow(key: "esc",

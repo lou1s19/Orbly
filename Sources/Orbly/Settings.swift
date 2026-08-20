@@ -204,6 +204,13 @@ final class AppSettings {
         set { d.set(newValue, forKey: "language") }
     }
 
+    /// The key that starts a dictation. Fn by default; anyone who uses Fn to
+    /// switch the input source can move dictation to a right-hand modifier.
+    var dictationKey: DictationKey {
+        get { DictationKey(rawValue: d.string(forKey: "dictationKey") ?? "") ?? .default }
+        set { d.set(newValue.rawValue, forKey: "dictationKey") }
+    }
+
     /// First-run tour already shown (or skipped).
     var onboardingCompleted: Bool {
         get { d.bool(forKey: "onboardingCompleted") }
