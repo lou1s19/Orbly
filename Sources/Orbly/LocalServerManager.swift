@@ -101,12 +101,12 @@ final class LocalServerManager {
             // then fails visibly with an error message.
             let parent = Self.parentPid(of: pid)
             guard parent == 1 || parent == ownPid else {
-                NSLog("Orbly: fremder whisper-server auf Port \(port) (PID \(pid)) bleibt unangetastet")
+                NSLog("Orbly: a foreign whisper-server on port \(port) (PID \(pid)) is left untouched")
                 continue
             }
             kill(pid, SIGTERM)
             killed += 1
-            NSLog("Orbly: verwaisten whisper-server beendet (PID \(pid))")
+            NSLog("Orbly: terminated an orphaned whisper-server (PID \(pid))")
         }
         // The port only frees up once the process really is gone, otherwise our
         // bind fails silently. Only wait in the (rare) orphan case: in normal
@@ -254,7 +254,7 @@ final class LocalServerManager {
             p.standardError = logHandle
         }
         p.terminationHandler = { [weak self] proc in
-            NSLog("Orbly: whisper-server beendet (Code \(proc.terminationStatus))")
+            NSLog("Orbly: whisper-server exited (code \(proc.terminationStatus))")
             DispatchQueue.main.async {
                 // Only clear our own reference: if the server dies unexpectedly and a new
                 // one starts in the meantime, this handler would otherwise take away the
@@ -267,7 +267,7 @@ final class LocalServerManager {
             try p.run()
             process = p
             runningModelPath = modelPath
-            NSLog("Orbly: whisper-server gestartet (PID \(p.processIdentifier))")
+            NSLog("Orbly: whisper-server started (PID \(p.processIdentifier))")
         } catch {
             NSLog("Orbly: whisper-server failed to start: \(error)")
         }

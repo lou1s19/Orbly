@@ -135,7 +135,7 @@ final class AudioRecorder {
         }
         lastStartWarmupSeconds = Date().timeIntervalSince(warmupStart)
         if lastStartWarmupSeconds >= WakeUpPress.warmupThreshold {
-            NSLog("Orbly: Audio-Hardware war eingeschlafen, Start dauerte \(String(format: "%.2f", lastStartWarmupSeconds)) s")
+            NSLog("Orbly: the audio hardware was asleep, the start took \(String(format: "%.2f", lastStartWarmupSeconds)) s")
         }
         isRecording = true
     }

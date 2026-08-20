@@ -5,8 +5,8 @@ import Foundation
 ///
 /// Deliberately without a server, an account or a check: whoever confirms they
 /// donated is believed. With open source any check would be removed in two
-/// minutes, and a payment server would collect exactly the data Orbly otherwise
-/// vermeidet.
+/// minutes, and a payment server would collect exactly the data Orbly avoids
+/// everywhere else.
 enum Donation {
     static let pageURL = URL(string: "https://ko-fi.com/lou1s")!
 

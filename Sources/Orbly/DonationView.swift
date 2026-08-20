@@ -28,7 +28,7 @@ struct DonationView: View {
         .animation(.easeOut(duration: 0.2), value: pageOpened)
     }
 
-    // MARK: - Fragen
+    // MARK: - Asking
 
     private var askPage: some View {
         VStack(spacing: 0) {
@@ -95,7 +95,7 @@ struct DonationView: View {
         .padding(.vertical, 28)
     }
 
-    // MARK: - Danken
+    // MARK: - Saying thanks
 
     private var thanksPage: some View {
         VStack(spacing: 14) {
