@@ -3,6 +3,15 @@
 All notable changes to Orbly. Newest first. This project follows
 [semantic versioning](https://semver.org).
 
+## [1.1.2] - 2026-08-20
+
+### Fixed
+- Windows opened tucked under the menu bar instead of in the middle of the
+  screen, and on a wide screen they hung over the right edge. This affected the
+  first-run tour, the settings and the donation window.
+- With more than one monitor, windows opened on the screen carrying the menu bar
+  instead of the one you are working on.
+
 ## [1.1.1] - 2026-08-20
 
 ### Added
@@ -74,6 +83,7 @@ against a server you run yourself. No account, no telemetry.
 - Interface in English, German, Spanish, French and Russian.
 - Released under AGPL v3.
 
+[1.1.2]: https://github.com/lou1s19/Orbly/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/lou1s19/Orbly/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/lou1s19/Orbly/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lou1s19/Orbly/releases/tag/v1.0.0
