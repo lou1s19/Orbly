@@ -226,7 +226,7 @@ final class LocalServerManager {
         }
         let modelPath = AppSettings.shared.modelPath
         guard FileManager.default.fileExists(atPath: modelPath) else {
-            NSLog("Orbly: model fehlt: \(modelPath)")
+            NSLog("Orbly: model is missing: \(modelPath)")
             return
         }
         // Clean up orphans from earlier sessions first, otherwise a zombie holds
@@ -269,7 +269,7 @@ final class LocalServerManager {
             runningModelPath = modelPath
             NSLog("Orbly: whisper-server gestartet (PID \(p.processIdentifier))")
         } catch {
-            NSLog("Orbly: whisper-server Start fehlgeschlagen: \(error)")
+            NSLog("Orbly: whisper-server failed to start: \(error)")
         }
     }
 

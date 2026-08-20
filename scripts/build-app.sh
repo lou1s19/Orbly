@@ -30,6 +30,15 @@ mkdir -p "$APP/Contents/Frameworks"
 cp -R "$PRODUCTS/Sparkle.framework" "$APP/Contents/Frameworks/"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 
+# Localized permission dialogs (NSMicrophoneUsageDescription and friends).
+# macOS reads these from <lang>.lproj/InfoPlist.strings inside the bundle; the
+# English text in Info.plist is only the fallback.
+for LPROJ in Resources/*.lproj; do
+  [ -d "$LPROJ" ] || continue
+  mkdir -p "$APP/Contents/Resources/$(basename "$LPROJ")"
+  cp "$LPROJ"/*.strings "$APP/Contents/Resources/$(basename "$LPROJ")/"
+done
+
 # Logo (sidebar) and app icon from Resources/logo.png, if present
 if [ -f "Resources/logo.png" ]; then
   cp "Resources/logo.png" "$APP/Contents/Resources/logo.png"

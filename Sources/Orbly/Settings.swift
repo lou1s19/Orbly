@@ -71,7 +71,7 @@ enum LoginItem {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("Orbly: Login-Item fehlgeschlagen: \(error)")
+            NSLog("Orbly: registering the login item failed: \(error)")
         }
         // Do not return the wish, look at what the system says.
         return isOn

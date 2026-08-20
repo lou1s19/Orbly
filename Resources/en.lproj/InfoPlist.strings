@@ -1,0 +1,3 @@
+/* Shown by macOS in the permission dialogs. English is the base language. */
+"NSMicrophoneUsageDescription" = "Orbly records your voice to turn it into text on this Mac.";
+"NSAppleEventsUsageDescription" = "Orbly can pause music that is playing (Music/Spotify) while you dictate and resume it afterwards.";

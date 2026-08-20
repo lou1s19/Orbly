@@ -1,7 +1,7 @@
 import Foundation
 
 /// Detects the "wake-up press": the first Fn press after a longer pause, where
-/// scheinbar nichts passiert.
+/// seemingly nothing happens.
 ///
 /// Background: if the last dictation was a while ago, the audio hardware is
 /// asleep (and in local mode often the whisper-server too). The Fn press wakes
@@ -20,12 +20,12 @@ enum WakeUpPress {
     /// Deliberately only the measured wake-up time of the audio hardware. A cold
     /// start of the local whisper-server is a sign of a long pause too, but it does
     /// not cost a recording: it runs alongside while recording is already going. As
-    /// a trigger it would turn every accidental brush of the Fn key after a
-    /// Pause zu einem Hinweis aufblasen.
+    /// a trigger it would inflate every accidental brush of the Fn key after a
+    /// pause into a note.
     ///
     /// - Parameters:
     ///   - recordingWasTooShort: the recording did not reach the minimum length.
-    ///   - audioWarmup: Dauer des letzten `AudioRecorder.start()`.
+    ///   - audioWarmup: how long the last `AudioRecorder.start()` took.
     static func shouldHint(recordingWasTooShort: Bool, audioWarmup: TimeInterval) -> Bool {
         // An ordinary misfire (Fn brushed briefly) stays silent as before. A note on
         // every accidental tap would only be annoying.

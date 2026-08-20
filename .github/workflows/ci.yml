@@ -28,8 +28,12 @@ on:
 
 # A branch that is pushed and has an open pull request would otherwise run
 # twice. Keep the newest run, cancel the older one.
+#
+# The key carries the head repository as well. Without it, a pull request from
+# a fork whose branch happens to share a name with a branch here would cancel
+# our run, and ours theirs.
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
+  group: ci-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

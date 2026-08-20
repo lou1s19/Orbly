@@ -189,7 +189,9 @@ enum History {
                 migrated.append(HistoryEntry(date: last.date, text: last.text + "\n" + line))
             }
         }
-        migrated.removeAll { $0.text == "(no dictations yet)" }
+        // German on purpose: this is the placeholder the old Verlauf.md was
+        // created with, so it is legacy data and not text we produce.
+        migrated.removeAll { $0.text == "(noch keine Diktate)" }
 
         try? fm.createDirectory(at: AppSettings.appSupportDir, withIntermediateDirectories: true)
         fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])

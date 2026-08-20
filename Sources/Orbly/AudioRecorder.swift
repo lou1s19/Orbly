@@ -110,7 +110,7 @@ final class AudioRecorder {
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             throw NSError(domain: "Orbly", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Kein Mikrofon gefunden."
+                NSLocalizedDescriptionKey: "No microphone found."
             ])
         }
         guard let conv = AVAudioConverter(from: inputFormat, to: targetFormat) else {

@@ -317,7 +317,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         // dutifully downloads a 404 page too, and whisper-server later fails with
         // a meaningless message. Better to abort here.
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            NSLog("Orbly: model download \(model.id) fehlgeschlagen (HTTP \(http.statusCode))")
+            NSLog("Orbly: model download \(model.id) failed (HTTP \(http.statusCode))")
             DispatchQueue.main.async { self.failed.insert(id) }
             return
         }
@@ -364,7 +364,7 @@ extension ModelManager: URLSessionDownloadDelegate {
             try? FileManager.default.removeItem(at: dest)
             try FileManager.default.moveItem(at: location, to: dest)
         } catch {
-            NSLog("Orbly: model download verschieben fehlgeschlagen: \(error)")
+            NSLog("Orbly: moving the downloaded model failed: \(error)")
             DispatchQueue.main.async { self.failed.insert(id) }
         }
     }
@@ -377,7 +377,7 @@ extension ModelManager: URLSessionDownloadDelegate {
         DispatchQueue.main.async {
             self.progress[id] = nil
             if let error, (error as NSError).code != NSURLErrorCancelled {
-                NSLog("Orbly: model download fehlgeschlagen: \(error)")
+                NSLog("Orbly: model download failed: \(error)")
                 self.failed.insert(id)
             }
             self.objectWillChange.send()

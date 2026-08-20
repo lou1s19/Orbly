@@ -19,7 +19,6 @@ final class FnKeyMonitor {
     /// them while recording or transcribing (Esc aborts, any other key means "Fn
     /// was meant as a modifier"). The `.flagsChanged` monitor on the other hand has
     /// to run permanently, otherwise the Fn press would never arrive.
-    /// Fn-Druck nie an.
     func setKeyMonitoringEnabled(_ enabled: Bool) {
         if enabled {
             guard keyMonitors.isEmpty else { return }

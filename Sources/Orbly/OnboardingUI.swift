@@ -321,7 +321,6 @@ struct FeatureCard: View {
         }
         // maxHeight together with fixedSize on the row makes all cards next to
         // each other equally tall, even with texts of different lengths.
-        // langen Texten.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 22)
         .padding(.horizontal, 14)

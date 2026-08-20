@@ -5,8 +5,9 @@ the downloads live with the website (`orbly-website`, deployed on Vercel), not o
 Sparkle has to fetch `appcast.xml` without a login, and download and update should come
 from the same address.
 
-Releases are signed with an Apple Developer ID and notarized, so they only work for
-whoever holds that certificate. Everything below is written for that person.
+Releases are signed with an Apple Developer ID and notarized, so only whoever holds
+that certificate can publish one. Everything below is written for that person. The
+released app itself runs for everybody.
 
 ## The steps
 

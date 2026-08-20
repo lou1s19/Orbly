@@ -236,7 +236,7 @@ final class OrbRenderer: NSObject, MTKViewDelegate {
             return true
         } catch {
             Self.setupFailed = true
-            NSLog("Orbly: Orb-Shader-Kompilierung fehlgeschlagen: \(error)")
+            NSLog("Orbly: compiling the orb shader failed: \(error)")
             return false
         }
     }
@@ -316,7 +316,7 @@ struct OrbMetalView: NSViewRepresentable {
         v.layer?.isOpaque = false
         if let device = v.device {
             if !context.coordinator.setup(device: device) {
-                Self.fallBackToPill("Shader-Kompilierung fehlgeschlagen")
+                Self.fallBackToPill("shader compilation failed")
             }
         } else {
             Self.fallBackToPill("no Metal device")

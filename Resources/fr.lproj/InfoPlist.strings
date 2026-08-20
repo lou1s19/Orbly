@@ -1,0 +1,3 @@
+/* Shown by macOS in the permission dialogs. */
+"NSMicrophoneUsageDescription" = "Orbly enregistre votre voix pour la convertir en texte sur ce Mac.";
+"NSAppleEventsUsageDescription" = "Orbly peut mettre en pause la musique en cours (Music/Spotify) pendant la dictée et la reprendre ensuite.";

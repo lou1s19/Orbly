@@ -14,7 +14,7 @@ enum Donation {
     /// is worth anything to them.
     static let minimumDictations = 20
 
-    /// Abstand zwischen zwei Nachfragen.
+    /// Gap between two prompts, in days.
     static let repeatAfterDays = 14
 
     /// Everything that decides whether to show it. A separate type, so the rule
@@ -28,7 +28,7 @@ enum Donation {
     }
 
     static func shouldShow(_ state: State, now: Date = Date()) -> Bool {
-        // Gespendet oder abbestellt: nie wieder.
+        // Donated or opted out: never again.
         guard !state.hasDonated, !state.promptDisabled else { return false }
         // Do not interrupt the first-run tour with it.
         guard state.onboardingCompleted else { return false }

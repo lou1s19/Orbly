@@ -247,10 +247,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, let window = self.onboardingWindow else { return }
-            // The flag stays set until after close(): `close()` does not ask the
-            // delegate (only `performClose(_:)` does), but if it did,
-            // windowShouldClose lets it through thanks to the flag instead of
-            window.close() // fading again. Also clears the flags through windowWillClose.
+            // The flag stays set until after close(): `close()` does not ask
+            // the delegate (only `performClose(_:)` does), but if it did,
+            // windowShouldClose would let it through thanks to the flag instead
+            // of fading again. close() also clears the flags through
+            // windowWillClose.
+            window.close()
             self.onboardingClosing = false
             window.alphaValue = 1
         })
@@ -334,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         recorder.requestPermission { granted in
             if !granted {
-                NSLog("Orbly: Mikrofon-Berechtigung fehlt")
+                NSLog("Orbly: microphone permission is missing")
             }
         }
     }
