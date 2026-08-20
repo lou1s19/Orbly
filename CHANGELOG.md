@@ -3,7 +3,7 @@
 All notable changes to Orbly. Newest first. This project follows
 [semantic versioning](https://semver.org).
 
-## [Unreleased]
+## [1.1.1] - 2026-08-20
 
 ### Added
 - The dictation key can be changed. Fn stays the default, but you can move
@@ -72,6 +72,6 @@ against a server you run yourself. No account, no telemetry.
 - Interface in English, German, Spanish, French and Russian.
 - Released under AGPL v3.
 
-[Unreleased]: https://github.com/lou1s19/Orbly/compare/v1.1.0...HEAD
+[1.1.1]: https://github.com/lou1s19/Orbly/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/lou1s19/Orbly/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/lou1s19/Orbly/releases/tag/v1.0.0
