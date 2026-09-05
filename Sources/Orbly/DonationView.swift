@@ -78,15 +78,9 @@ struct DonationView: View {
                 .padding(.top, 10)
             }
 
-            HStack(spacing: 22) {
-                QuietButton(title: L10n.t("donate.later")) {
-                    AppSettings.shared.donationPromptLastShown = Date()
-                    close()
-                }
-                QuietButton(title: L10n.t("donate.never")) {
-                    AppSettings.shared.donationPromptDisabled = true
-                    close()
-                }
+            QuietButton(title: L10n.t("donate.later")) {
+                AppSettings.shared.donationPromptLastShown = Date()
+                close()
             }
             .padding(.top, 20)
 

@@ -3,6 +3,12 @@
 All notable changes to Orbly. Newest first. This project follows
 [semantic versioning](https://semver.org).
 
+## [Unreleased]
+
+### Changed
+- The donation window now only offers "Later". "Do not ask again" is gone;
+  whoever pressed it in an earlier version is still left alone.
+
 ## [1.1.2] - 2026-08-20
 
 ### Fixed

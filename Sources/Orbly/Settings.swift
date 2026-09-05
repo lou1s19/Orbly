@@ -225,7 +225,8 @@ final class AppSettings {
         set { d.set(newValue, forKey: "hasDonated") }
     }
 
-    /// "Do not ask again" in the donation window.
+    /// Legacy: the "Do not ask again" button was removed in 1.1.3. Kept read-only
+    /// so anyone who pressed it in an earlier version stays undisturbed.
     var donationPromptDisabled: Bool {
         get { d.bool(forKey: "donationPromptDisabled") }
         set { d.set(newValue, forKey: "donationPromptDisabled") }
